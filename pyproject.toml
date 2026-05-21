@@ -6,14 +6,14 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "pydantic>=2.9",
+    "pydantic[email]>=2.9",
     "pydantic-settings>=2.6",
     "sqlalchemy>=2.0.36",
     "alembic>=1.13",
     "psycopg[binary]>=3.2",
     "sqlalchemy-aurora-data-api>=0.5",
     "pyjwt>=2.9",
-    "passlib[bcrypt]>=1.7",
+    "bcrypt>=4.2",
     "anthropic>=0.40",
     "boto3>=1.35",
 ]

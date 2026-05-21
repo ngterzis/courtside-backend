@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     env: Literal["local", "dev", "prod"] = "local"
 
-    jwt_secret: str = "dev-only-change-me"
+    jwt_secret: str = "dev-only-jwt-secret-replace-in-prod-32-plus-bytes"
     jwt_expiry_minutes: int = 60 * 24 * 7
 
     db_driver: Literal["psycopg", "aurora_data_api"] = "psycopg"
