@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from courtside.config import get_settings
 from courtside.errors import install_error_handlers
-from courtside.routes import auth, games, me, seasons, stats
+from courtside.routes import archetype, auth, games, me, seasons, stats
 
 settings = get_settings()
 
@@ -15,6 +15,7 @@ app.include_router(me.router)
 app.include_router(seasons.router)
 app.include_router(games.router)
 app.include_router(stats.router)
+app.include_router(archetype.router)
 
 
 @app.get("/api/health")
