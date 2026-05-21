@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -11,13 +12,19 @@ from courtside.db.session import build_engine, get_db
 from courtside.main import app
 
 
+def _reset_schema(e: Engine) -> None:
+    Base.metadata.drop_all(e)
+    with e.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+
+
 @pytest.fixture(scope="session")
 def engine() -> Iterator[Engine]:
     e = build_engine()
-    Base.metadata.drop_all(e)
+    _reset_schema(e)
     Base.metadata.create_all(e)
     yield e
-    Base.metadata.drop_all(e)
+    _reset_schema(e)
 
 
 @pytest.fixture
