@@ -58,10 +58,11 @@ uv run alembic downgrade base           # roll back to empty
 uv run alembic revision --autogenerate -m "your message"
 ```
 
-`DB_DRIVER` selects the SQLAlchemy dialect:
+Connection mode is env-driven (see `.env.example`):
 
-- `psycopg` (default) — local Postgres via the `postgresql+psycopg://` URL
-- `aurora_data_api` — production via AWS RDS Data API (no VPC required for Lambda)
+- default — local Postgres via a `postgresql+psycopg://` URL built from `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD`
+- `DATABASE_URL` — a full SQLAlchemy URL; wins over the discrete fields (the Fargate migration task uses this)
+- `USE_DATA_API=true` — production via the AWS RDS Data API using `DB_CLUSTER_ARN` + `DB_SECRET_ARN` (no VPC required for Lambda)
 
 ## Project layout
 

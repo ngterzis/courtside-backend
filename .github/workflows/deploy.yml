@@ -1,0 +1,98 @@
+name: Deploy backend
+
+# Builds the container image, runs DB migrations, and rolls it out to the API
+# and chat Lambdas. Infra (ECR repo, Lambdas, OIDC role, migration task) lives
+# in the courtside-infra repo.
+#
+# Required GitHub config:
+#   secrets.AWS_DEPLOY_ROLE_ARN        -> terraform output github_actions_role_arn
+#   vars.FARGATE_SUBNET_ID             -> terraform output fargate_subnet_id
+#   vars.FARGATE_SECURITY_GROUP_ID     -> terraform output fargate_security_group_id
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: courtside-prod
+  API_FUNCTION: courtside-prod-api
+  CHAT_FUNCTION: courtside-prod-chat
+  ECS_CLUSTER: courtside-prod-cluster
+  MIGRATE_TASK_FAMILY: courtside-prod-migrate
+
+jobs:
+  deploy:
+    name: Build, migrate, deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY"
+          docker build -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+          echo "image=$IMAGE:$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations
+        run: |
+          run_output=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition "$MIGRATE_TASK_FAMILY" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.FARGATE_SUBNET_ID }}],securityGroups=[${{ vars.FARGATE_SECURITY_GROUP_ID }}],assignPublicIp=DISABLED}" \
+            --output json)
+
+          task_arn=$(echo "$run_output" | jq -r '.tasks[0].taskArn // empty')
+          if [ -z "$task_arn" ]; then
+            echo "::error::Failed to start migration task"
+            echo "$run_output" | jq -r '.failures'
+            exit 1
+          fi
+          echo "Started migration task: $task_arn"
+
+          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$task_arn"
+
+          exit_code=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$task_arn" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          echo "Migration container exit code: $exit_code"
+          if [ "$exit_code" != "0" ]; then
+            echo "::error::Database migration failed (exit code $exit_code) — see /ecs/courtside-prod-migrate logs"
+            exit 1
+          fi
+
+      - name: Deploy to Lambda
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          for fn in "$API_FUNCTION" "$CHAT_FUNCTION"; do
+            echo "Updating $fn -> $IMAGE"
+            aws lambda update-function-code \
+              --function-name "$fn" \
+              --image-uri "$IMAGE" >/dev/null
+          done
