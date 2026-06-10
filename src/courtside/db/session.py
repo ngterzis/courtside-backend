@@ -7,8 +7,10 @@ from courtside.config import Settings, get_settings
 
 
 def build_url(settings: Settings) -> str:
-    if settings.db_driver == "aurora_data_api":
-        return f"postgresql+auroradataapi://:@/{settings.aurora_database_name}"
+    if settings.use_data_api:
+        return f"postgresql+auroradataapi://:@/{settings.db_name}"
+    if settings.database_url:
+        return settings.database_url
     return (
         f"postgresql+psycopg://"
         f"{settings.db_user}:{settings.db_password}"
@@ -19,12 +21,12 @@ def build_url(settings: Settings) -> str:
 def build_engine(settings: Settings | None = None) -> Engine:
     settings = settings or get_settings()
     url = build_url(settings)
-    if settings.db_driver == "aurora_data_api":
+    if settings.use_data_api:
         return create_engine(
             url,
             connect_args={
-                "aurora_cluster_arn": settings.aurora_cluster_arn,
-                "aurora_secret_arn": settings.aurora_secret_arn,
+                "aurora_cluster_arn": settings.db_cluster_arn,
+                "aurora_secret_arn": settings.db_secret_arn,
                 "region_name": settings.aws_region,
             },
         )
