@@ -22,13 +22,21 @@ def build_engine(settings: Settings | None = None) -> Engine:
     settings = settings or get_settings()
     url = build_url(settings)
     if settings.use_data_api:
+        import boto3
+
+        # aurora_data_api.connect() takes `secret_arn` (not `aurora_secret_arn`)
+        # and has no region argument — the region is carried by the boto3 client.
         return create_engine(
             url,
             connect_args={
                 "aurora_cluster_arn": settings.db_cluster_arn,
-                "aurora_secret_arn": settings.db_secret_arn,
-                "region_name": settings.aws_region,
+                "secret_arn": settings.db_secret_arn,
+                "rds_data_client": boto3.client("rds-data", region_name=settings.aws_region),
             },
+            # The Data API returns UUIDs as strings, so SQLAlchemy's batched
+            # insertmanyvalues can't match its UUID sentinels. Fall back to plain
+            # inserts (our client-side uuid4 PKs make RETURNING unnecessary).
+            use_insertmanyvalues=False,
         )
     return create_engine(url, pool_pre_ping=True)
 
