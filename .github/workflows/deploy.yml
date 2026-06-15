@@ -65,7 +65,7 @@ jobs:
             --cluster "$ECS_CLUSTER" \
             --task-definition "$MIGRATE_TASK_FAMILY" \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.FARGATE_SUBNET_ID }}],securityGroups=[${{ vars.FARGATE_SECURITY_GROUP_ID }}],assignPublicIp=DISABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.FARGATE_SUBNET_ID }}],securityGroups=[${{ vars.FARGATE_SECURITY_GROUP_ID }}],assignPublicIp=ENABLED}" \
             --output json)
 
           task_arn=$(echo "$run_output" | jq -r '.tasks[0].taskArn // empty')
