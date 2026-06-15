@@ -3,6 +3,11 @@
 Backend API for **Courtside**, a basketball stats app for a recreational league.
 Implements the contract defined in [`BACKEND.md`](./BACKEND.md).
 
+## Related repositories
+
+- [**courtside**](https://github.com/ngterzis/courtside) — the client app
+- [**courtside-infra**](https://github.com/ngterzis/courtside-infra) — Terraform infrastructure (Aurora, Lambda, API Gateway, Function URL)
+
 ## Stack
 
 - **Python 3.12** + **FastAPI** + **Pydantic v2** (camelCase JSON via `alias_generator`)
@@ -12,7 +17,7 @@ Implements the contract defined in [`BACKEND.md`](./BACKEND.md).
 - **AWS Lambda** + **Lambda Web Adapter** — the same FastAPI app runs locally under uvicorn and inside Lambda
   - `/api/chat` is a separate Lambda behind a Function URL in `RESPONSE_STREAM` mode (SSE)
   - everything else is behind API Gateway REST
-- **Terraform** — infra lives in `infra/` (added later)
+- **Terraform** — infra lives in the [`courtside-infra`](https://github.com/ngterzis/courtside-infra) repo
 
 ## Prerequisites
 
@@ -111,3 +116,7 @@ pyproject.toml        # deps managed by uv
 | POST | `/api/me/onboard` | bearer |
 
 More to come — see `BACKEND.md` for the full contract.
+
+## License
+
+[MIT](./LICENSE)
