@@ -34,10 +34,21 @@ TEAM_NAME_FRAGMENT = "σπη"  # matches both Λάσπη and Λασπη
 SEASON_LABEL = "2025-26"
 SEASON_START = date(2025, 9, 1)
 
+# One login per roster player. player_name must match the normalised CSV name
+# exactly (see _normalize), otherwise the user won't link to a player — the guard
+# in main() will fail the seed if that happens.
 SEED_USERS = [
     {"email": "nikos@courtside.dev", "password": "password123", "player_name": "Τερζής, Νικόλαος"},
     {"email": "pavlos@courtside.dev", "password": "password123", "player_name": "Πλυτάς, Παύλος"},
-     {"email": "thodoris@courtside.dev", "password": "password123", "player_name": "Σαμαράς, Θοδωρής"},
+    {"email": "thodoris@courtside.dev", "password": "password123", "player_name": "Σαμαράς, Θοδωρής"},
+    {"email": "dimitris.samaras@courtside.dev", "password": "password123", "player_name": "Samaras, Dimitris"},
+    {"email": "dimitris.padouvas@courtside.dev", "password": "password123", "player_name": "Παδουβας, Δημητρης"},
+    {"email": "nikolas.chatzis@courtside.dev", "password": "password123", "player_name": "Χατζής, Νικόλας"},
+    {"email": "michalis.papakonstantinou@courtside.dev", "password": "password123", "player_name": "Παπακωνσταντινου, Μιχάλης"},
+    {"email": "dimitris.papakonstantinou@courtside.dev", "password": "password123", "player_name": "Παπακωνσταντίνου, Δημήτρης"},
+    {"email": "alexandros.asfis@courtside.dev", "password": "password123", "player_name": "Ασφής, Αλέξανδρος"},
+    {"email": "dimitris.papapantelidis@courtside.dev", "password": "password123", "player_name": "Παπαπαντελίδης, Δημήτρης"},
+    {"email": "apostolos.kyriakopoulos@courtside.dev", "password": "password123", "player_name": "Kyriakopoulos, Apostolos"},
 ]
 
 
@@ -100,6 +111,12 @@ def main() -> None:
                 db.add(player)
                 player_map[norm] = player
         db.flush()
+
+        unmatched = [u["email"] for u in SEED_USERS if _normalize(u["player_name"]) not in player_map]
+        if unmatched:
+            raise SystemExit(
+                f"Seed users with no matching player (check player_name spelling): {unmatched}"
+            )
 
         for u in SEED_USERS:
             norm = _normalize(u["player_name"])
