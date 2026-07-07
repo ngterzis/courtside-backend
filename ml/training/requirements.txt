@@ -1,0 +1,5 @@
+# Installed by the SageMaker XGBoost container at job start (script mode picks
+# this up from source_dir). Unpinned so pip resolves against the container's
+# Python version; xgboost/pandas/sklearn are already in the container image.
+mlflow
+sagemaker-mlflow

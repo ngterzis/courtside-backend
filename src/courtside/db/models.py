@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum as SAEnum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -175,6 +176,26 @@ class Archetype(Base):
 
     __table_args__ = (
         UniqueConstraint("player_id", "season_id", name="uq_archetypes_player_season"),
+    )
+
+
+class Prediction(Base):
+    __tablename__ = "predictions"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"), index=True)
+    player_id: Mapped[UUID] = mapped_column(ForeignKey("players.id"), index=True)
+
+    # Date of the most recent game the features were built from. The actual outcome
+    # to score this prediction against is the player's next game after this date.
+    as_of_date: Mapped[date] = mapped_column(Date, index=True)
+    predicted_points: Mapped[float] = mapped_column(Float)
+    baseline_points: Mapped[float] = mapped_column(Float)
+    model_version: Mapped[str] = mapped_column(String(120))
+    source: Mapped[str] = mapped_column(String(20))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 
