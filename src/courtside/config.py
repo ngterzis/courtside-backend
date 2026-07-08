@@ -30,6 +30,12 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
 
+    # Next-game points model (all optional). Unset → the projection endpoint falls
+    # back to the trailing-average baseline, so local dev and tests need no AWS.
+    sagemaker_endpoint_name: str | None = None
+    feature_group_name: str | None = None
+    mlflow_tracking_uri: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:
