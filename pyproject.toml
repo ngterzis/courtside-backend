@@ -30,8 +30,12 @@ dev = [
 ]
 # Offline pipeline only (ml/). Deliberately excluded from the serving Lambda image,
 # which needs boto3 alone to invoke the endpoint + read the feature store.
+#
+# sagemaker pinned below v3: v3 is a from-scratch rewrite with no v2 compat layer
+# (Estimator/Model/Session and all of sagemaker.workflow.* used here are gone,
+# replaced by ModelTrainer/ModelBuilder) — pin until this pipeline is migrated.
 ml = [
-    "sagemaker>=2.230",
+    "sagemaker>=2.230,<3",
     "mlflow>=2.16",
     "xgboost>=2.1",
     "scikit-learn>=1.5",

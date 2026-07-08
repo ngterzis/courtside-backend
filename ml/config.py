@@ -24,6 +24,7 @@ class PipelineConfig:
     mlflow_tracking_uri: str
     model_package_group: str
     endpoint_name: str
+    pipeline_name: str
 
     @classmethod
     def from_env(cls) -> PipelineConfig:
@@ -35,15 +36,12 @@ class PipelineConfig:
 
         return cls(
             region=os.environ.get("AWS_REGION", "eu-central-1"),
-            feature_group_name=os.environ.get(
-                "FEATURE_GROUP_NAME", "courtside-player-form"
-            ),
+            feature_group_name=os.environ.get("FEATURE_GROUP_NAME", "courtside-player-form"),
             offline_store_s3=req("FEATURE_STORE_OFFLINE_S3"),
             athena_output_s3=req("ATHENA_OUTPUT_S3"),
             role_arn=req("SAGEMAKER_ROLE_ARN"),
             mlflow_tracking_uri=req("MLFLOW_TRACKING_URI"),
-            model_package_group=os.environ.get(
-                "MODEL_PACKAGE_GROUP", "courtside-next-game-points"
-            ),
+            model_package_group=os.environ.get("MODEL_PACKAGE_GROUP", "courtside-next-game-points"),
             endpoint_name=os.environ.get("ENDPOINT_NAME", "courtside-next-game-points"),
+            pipeline_name=os.environ.get("PIPELINE_NAME", "courtside-next-game-points"),
         )
