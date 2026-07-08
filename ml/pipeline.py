@@ -88,8 +88,14 @@ def _ingest_env(cfg: PipelineConfig) -> dict[str, str]:
 
 
 def build(cfg: PipelineConfig, image_uri: str) -> Pipeline:
-    session = PipelineSession(boto_session=boto3.Session(region_name=cfg.region))
     bucket = cfg.offline_store_s3.removeprefix("s3://").split("/", 1)[0]
+    # default_bucket pinned to our own bucket: otherwise the SDK probes/creates its
+    # own auto-named "sagemaker-<region>-<account>" bucket on every session, which
+    # neither IAM role here (sagemaker_exec, github_actions) was ever granted access
+    # to — only courtside-prod-ml-* is.
+    session = PipelineSession(
+        boto_session=boto3.Session(region_name=cfg.region), default_bucket=bucket
+    )
 
     # ── Ingest ───────────────────────────────────────────────────────────────
     ingest_processor = Processor(
