@@ -6,19 +6,20 @@ name: ML pipeline
 # for how to trigger one on demand. Infra (ECR repo, feature group, model registry,
 # MLflow, sagemaker_exec role) lives in the courtside-infra repo.
 #
-# Required GitHub config (all -> terraform output in courtside-infra/envs/prod):
+# Required GitHub config — all repo secrets (not variables) so ARNs/paths never
+# print in plaintext into workflow logs on this public repo. All -> terraform
+# output in courtside-infra/envs/prod:
 #   secrets.AWS_DEPLOY_ROLE_ARN     -> github_actions_role_arn
-#   vars.ML_ECR_REPOSITORY          -> ml_pipeline_repository_url (repo name only, no registry host)
-#   vars.ML_FEATURE_GROUP_NAME      -> ml_feature_group_name
-#   vars.ML_OFFLINE_STORE_S3        -> ml_offline_store_s3
-#   vars.ML_ATHENA_OUTPUT_S3        -> ml_athena_output_s3
-#   vars.ML_SAGEMAKER_ROLE_ARN      -> ml_sagemaker_role_arn
-#   vars.ML_MLFLOW_TRACKING_URI     -> mlflow_tracking_server_arn
-#   vars.ML_MODEL_PACKAGE_GROUP     -> ml_model_package_group
-#   vars.ML_ENDPOINT_NAME           -> ml_endpoint_name
-#   vars.ML_PIPELINE_NAME           -> ml_pipeline_name
-#   vars.DB_CLUSTER_ARN             -> db_cluster_arn
-#   vars.DB_SECRET_ARN              -> db_credentials_secret_arn
+#   secrets.ML_FEATURE_GROUP_NAME   -> ml_feature_group_name
+#   secrets.ML_OFFLINE_STORE_S3     -> ml_offline_store_s3
+#   secrets.ML_ATHENA_OUTPUT_S3     -> ml_athena_output_s3
+#   secrets.ML_SAGEMAKER_ROLE_ARN   -> ml_sagemaker_role_arn
+#   secrets.ML_MLFLOW_TRACKING_URI  -> mlflow_tracking_server_arn
+#   secrets.ML_MODEL_PACKAGE_GROUP  -> ml_model_package_group
+#   secrets.ML_ENDPOINT_NAME        -> ml_endpoint_name
+#   secrets.ML_PIPELINE_NAME        -> ml_pipeline_name
+#   secrets.DB_CLUSTER_ARN          -> db_cluster_arn
+#   secrets.DB_SECRET_ARN           -> db_credentials_secret_arn
 
 on:
   push:
@@ -41,6 +42,7 @@ permissions:
 
 env:
   AWS_REGION: eu-central-1
+  ML_ECR_REPOSITORY: courtside-prod-ml-pipeline
 
 jobs:
   upsert:
@@ -64,7 +66,6 @@ jobs:
         id: build
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
-          ML_ECR_REPOSITORY: ${{ vars.ML_ECR_REPOSITORY }}
         run: |
           IMAGE="$REGISTRY/$ML_ECR_REPOSITORY"
           docker build -f Dockerfile.ml -t "$IMAGE:$GITHUB_SHA" -t "$IMAGE:latest" .
@@ -77,16 +78,16 @@ jobs:
       - name: Upsert pipeline definition
         env:
           ML_PIPELINE_IMAGE_URI: ${{ steps.build.outputs.image }}
-          FEATURE_GROUP_NAME: ${{ vars.ML_FEATURE_GROUP_NAME }}
-          FEATURE_STORE_OFFLINE_S3: ${{ vars.ML_OFFLINE_STORE_S3 }}
-          ATHENA_OUTPUT_S3: ${{ vars.ML_ATHENA_OUTPUT_S3 }}
-          SAGEMAKER_ROLE_ARN: ${{ vars.ML_SAGEMAKER_ROLE_ARN }}
-          MLFLOW_TRACKING_URI: ${{ vars.ML_MLFLOW_TRACKING_URI }}
-          MODEL_PACKAGE_GROUP: ${{ vars.ML_MODEL_PACKAGE_GROUP }}
-          ENDPOINT_NAME: ${{ vars.ML_ENDPOINT_NAME }}
-          PIPELINE_NAME: ${{ vars.ML_PIPELINE_NAME }}
-          DB_CLUSTER_ARN: ${{ vars.DB_CLUSTER_ARN }}
-          DB_SECRET_ARN: ${{ vars.DB_SECRET_ARN }}
+          FEATURE_GROUP_NAME: ${{ secrets.ML_FEATURE_GROUP_NAME }}
+          FEATURE_STORE_OFFLINE_S3: ${{ secrets.ML_OFFLINE_STORE_S3 }}
+          ATHENA_OUTPUT_S3: ${{ secrets.ML_ATHENA_OUTPUT_S3 }}
+          SAGEMAKER_ROLE_ARN: ${{ secrets.ML_SAGEMAKER_ROLE_ARN }}
+          MLFLOW_TRACKING_URI: ${{ secrets.ML_MLFLOW_TRACKING_URI }}
+          MODEL_PACKAGE_GROUP: ${{ secrets.ML_MODEL_PACKAGE_GROUP }}
+          ENDPOINT_NAME: ${{ secrets.ML_ENDPOINT_NAME }}
+          PIPELINE_NAME: ${{ secrets.ML_PIPELINE_NAME }}
+          DB_CLUSTER_ARN: ${{ secrets.DB_CLUSTER_ARN }}
+          DB_SECRET_ARN: ${{ secrets.DB_SECRET_ARN }}
         run: |
           uv sync --group ml --no-dev
           uv run --group ml python -m ml.pipeline upsert
