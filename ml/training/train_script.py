@@ -5,7 +5,7 @@ passes hyperparameters as CLI flags, mounts the S3 channels under
 /opt/ml/input/data/<channel>, and tars everything written to SM_MODEL_DIR into
 model.tar.gz when the job exits (the same layout inference.py's model_fn expects).
 
-Not meant to be run locally — train.py launches the job.
+Not meant to be run locally — ml/pipeline.py's Train step launches the job.
 """
 
 from __future__ import annotations
@@ -58,9 +58,7 @@ def main() -> None:
     mlflow.set_experiment("next-game-points")
 
     with mlflow.start_run(run_name=job_name):
-        mlflow.log_params(
-            {**params, "num_round": args.num_round, "n_train": len(train_df)}
-        )
+        mlflow.log_params({**params, "num_round": args.num_round, "n_train": len(train_df)})
 
         booster = xgb.train(params, dtrain, num_boost_round=args.num_round)
 
@@ -70,18 +68,24 @@ def main() -> None:
         # Baseline = the trailing-3 average, already computed as a feature.
         baseline_mae = mean_absolute_error(test_df["label"], test_df["pts_avg_3"])
 
-        mlflow.log_metrics(
-            {"mae": model_mae, "rmse": model_rmse, "baseline_mae": baseline_mae}
-        )
+        mlflow.log_metrics({"mae": model_mae, "rmse": model_rmse, "baseline_mae": baseline_mae})
         mlflow.xgboost.log_model(booster, artifact_path="model")
         mlflow.set_tag("beats_baseline", str(model_mae < baseline_mae))
 
-    # Parsed from the job log by the launcher via metric_definitions regexes.
     print(f"model_mae={model_mae:.6f}")
     print(f"model_rmse={model_rmse:.6f}")
     print(f"baseline_mae={baseline_mae:.6f}")
 
-    booster.save_model(os.path.join(os.environ["SM_MODEL_DIR"], "xgboost-model"))
+    model_dir = Path(os.environ["SM_MODEL_DIR"])
+    booster.save_model(str(model_dir / "xgboost-model"))
+
+    # Bundled into model.tar.gz alongside the model itself — the pipeline's Evaluate
+    # step (ml/training/evaluate.py) extracts this so a ConditionStep can gate
+    # registration on it (PropertyFile/JsonGet only work off ProcessingStep outputs,
+    # not a training job's own output directly).
+    (model_dir / "metrics.json").write_text(
+        json.dumps({"model_mae": model_mae, "baseline_mae": baseline_mae})
+    )
 
 
 if __name__ == "__main__":

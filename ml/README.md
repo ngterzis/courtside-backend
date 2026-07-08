@@ -7,22 +7,30 @@ never diverge. Heavy deps live in the `ml` uv group and never enter the serving 
 ```
 ml/
   config.py                 # env-driven pipeline config (region, feature group, S3, role, MLflow)
+  pipeline.py                # SageMaker Pipeline DAG (ingest → prepare → train → evaluate → register) + CLI
   feature_store/
     feature_group.py        # create/describe the SageMaker feature group (schema ← FEATURE_NAMES)
     ingest.py               # games → point-in-time feature records → PutRecord (online + offline)
     training_query.sql      # dedup-to-latest, leak-free training set from the offline store
   training/
-    train.py                # Athena → XGBoost → MLflow → register Model Package (if it beats baseline)
+    prepare_data.py         # Athena → time-split → train.csv/test.csv (Processing step)
+    train_script.py         # XGBoost script-mode entry point, run inside the Training step
+    evaluate.py              # extracts model_mae/baseline_mae from model.tar.gz (Processing step)
   serving/
     inference.py            # SageMaker XGBoost script-mode handlers (CSV in → points out)
     deploy_endpoint.py      # latest Approved package → Serverless Inference endpoint
 ```
 
+Ingest, PrepareData and Evaluate run on the image built from `Dockerfile.ml` (pushed to
+a dedicated ECR repo by `.github/workflows/ml-pipeline.yml` on every push touching
+`ml/**`). Train reuses the built-in SageMaker XGBoost container via `train_script.py`,
+same as before.
+
 ## One-time setup
 
-The feature group, model package group, managed MLflow server, S3 bucket, and
-SageMaker execution role are all provisioned by the `ml` module in the
-**courtside-infra** repo. Pull the config from its Terraform outputs:
+The feature group, model package group, managed MLflow server, S3 bucket, SageMaker
+execution role, and the pipeline's ECR repo are all provisioned by the `ml` module in
+the **courtside-infra** repo. Pull the config from its Terraform outputs:
 
 ```bash
 uv sync --group ml
@@ -34,6 +42,11 @@ export SAGEMAKER_ROLE_ARN=$(terraform -chdir=../courtside-infra/envs/prod output
 export MODEL_PACKAGE_GROUP=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_model_package_group)
 export ENDPOINT_NAME=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_endpoint_name)
 export MLFLOW_TRACKING_URI=$(terraform -chdir=../courtside-infra/envs/prod output -raw mlflow_tracking_server_arn)
+export PIPELINE_NAME=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_pipeline_name)
+export ML_PIPELINE_IMAGE_URI=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_pipeline_repository_url):latest
+# Only needed for `ml.pipeline upsert` (the Ingest step reads Postgres via the Data API):
+export DB_CLUSTER_ARN=$(terraform -chdir=../courtside-infra/envs/prod output -raw db_cluster_arn)
+export DB_SECRET_ARN=$(terraform -chdir=../courtside-infra/envs/prod output -raw db_credentials_secret_arn)
 ```
 
 > The feature group is Terraform-owned, so `ml.feature_store.feature_group` is
@@ -43,11 +56,13 @@ export MLFLOW_TRACKING_URI=$(terraform -chdir=../courtside-infra/envs/prod outpu
 
 ## Each run of the loop
 
+CI (`.github/workflows/ml-pipeline.yml`) keeps the pipeline definition in sync with this
+code on every push — it never starts a run. Runs are on-demand only:
+
 ```bash
-# 1. ingest games into the local DB (scrape + seed), then:
-uv run --group ml python -m ml.feature_store.ingest        # features → Feature Store
-uv run --group ml python -m ml.training.train              # train, log to MLflow, register if it wins
-# 2. approve the model package in the SageMaker console (or via CLI), then:
+uv run --group ml python -m ml.pipeline run   # or: aws sagemaker start-pipeline-execution --pipeline-name "$PIPELINE_NAME"
+# ingest → prepare data → train → evaluate → (if it beats baseline) register as PendingManualApproval
+# then, once you've approved the model package in the SageMaker console:
 uv run --group ml python -m ml.serving.deploy_endpoint     # ship to the Serverless endpoint
 ```
 
@@ -57,6 +72,7 @@ Point the API at the endpoint by setting `SAGEMAKER_ENDPOINT_NAME` (and
 
 ## Cost
 
-The Serverless endpoint scales to zero. The Feature Store online store and the managed
-MLflow server are the small standing costs — delete the feature group and endpoint when
-you're done experimenting.
+The Serverless endpoint scales to zero, and pipeline steps only run (and cost anything)
+while a manually-started execution is in progress. The Feature Store online store and
+the managed MLflow server are the small standing costs — delete the feature group and
+endpoint when you're done experimenting.
