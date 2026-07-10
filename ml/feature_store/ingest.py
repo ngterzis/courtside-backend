@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 import boto3
 import sagemaker
 from sagemaker.feature_store.feature_group import FeatureGroup
+from sagemaker.feature_store.inputs import FeatureValue
 from sqlalchemy import select
 
 from courtside.db.models import Game, Season
@@ -36,7 +37,7 @@ def _now_iso() -> str:
 
 
 def _record(record_id: str, player_id: str, event_time: str, label: float,
-            features: dict[str, float]) -> list[dict[str, str]]:
+            features: dict[str, float]) -> list[FeatureValue]:
     values = {
         "record_id": record_id,
         "player_id": player_id,
@@ -44,7 +45,7 @@ def _record(record_id: str, player_id: str, event_time: str, label: float,
         "label": str(label),
         **{name: str(features[name]) for name in FEATURE_NAMES},
     }
-    return [{"FeatureName": k, "ValueAsString": v} for k, v in values.items()]
+    return [FeatureValue(feature_name=k, value_as_string=v) for k, v in values.items()]
 
 
 def _load_games_by_player() -> tuple[dict[str, list[Game]], dict[str, list[Game]]]:
