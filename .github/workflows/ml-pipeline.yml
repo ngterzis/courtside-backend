@@ -13,6 +13,7 @@ name: ML pipeline
 #   secrets.ML_FEATURE_GROUP_NAME   -> ml_feature_group_name
 #   secrets.ML_OFFLINE_STORE_S3     -> ml_offline_store_s3
 #   secrets.ML_ATHENA_OUTPUT_S3     -> ml_athena_output_s3
+#   secrets.ML_ATHENA_WORKGROUP     -> ml_athena_workgroup
 #   secrets.ML_SAGEMAKER_ROLE_ARN   -> ml_sagemaker_role_arn
 #   secrets.ML_MLFLOW_TRACKING_URI  -> mlflow_tracking_server_arn
 #   secrets.ML_MODEL_PACKAGE_GROUP  -> ml_model_package_group
@@ -81,6 +82,7 @@ jobs:
           FEATURE_GROUP_NAME: ${{ secrets.ML_FEATURE_GROUP_NAME }}
           FEATURE_STORE_OFFLINE_S3: ${{ secrets.ML_OFFLINE_STORE_S3 }}
           ATHENA_OUTPUT_S3: ${{ secrets.ML_ATHENA_OUTPUT_S3 }}
+          ATHENA_WORKGROUP: ${{ secrets.ML_ATHENA_WORKGROUP }}
           SAGEMAKER_ROLE_ARN: ${{ secrets.ML_SAGEMAKER_ROLE_ARN }}
           MLFLOW_TRACKING_URI: ${{ secrets.ML_MLFLOW_TRACKING_URI }}
           MODEL_PACKAGE_GROUP: ${{ secrets.ML_MODEL_PACKAGE_GROUP }}

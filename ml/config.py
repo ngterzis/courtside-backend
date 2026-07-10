@@ -20,6 +20,7 @@ class PipelineConfig:
     feature_group_name: str
     offline_store_s3: str  # s3://bucket/prefix for the offline store
     athena_output_s3: str  # s3://bucket/prefix for Athena query results
+    athena_workgroup: str  # "primary" has Managed Query Results on, conflicts with output_location
     role_arn: str  # SageMaker execution role
     mlflow_tracking_uri: str
     model_package_group: str
@@ -39,6 +40,7 @@ class PipelineConfig:
             feature_group_name=os.environ.get("FEATURE_GROUP_NAME", "courtside-player-form"),
             offline_store_s3=req("FEATURE_STORE_OFFLINE_S3"),
             athena_output_s3=req("ATHENA_OUTPUT_S3"),
+            athena_workgroup=os.environ.get("ATHENA_WORKGROUP", "courtside-prod-ml"),
             role_arn=req("SAGEMAKER_ROLE_ARN"),
             mlflow_tracking_uri=req("MLFLOW_TRACKING_URI"),
             model_package_group=os.environ.get("MODEL_PACKAGE_GROUP", "courtside-next-game-points"),

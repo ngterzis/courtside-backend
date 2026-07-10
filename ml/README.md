@@ -38,6 +38,7 @@ export AWS_REGION=eu-central-1
 export FEATURE_GROUP_NAME=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_feature_group_name)
 export FEATURE_STORE_OFFLINE_S3=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_offline_store_s3)
 export ATHENA_OUTPUT_S3=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_athena_output_s3)
+export ATHENA_WORKGROUP=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_athena_workgroup)
 export SAGEMAKER_ROLE_ARN=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_sagemaker_role_arn)
 export MODEL_PACKAGE_GROUP=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_model_package_group)
 export ENDPOINT_NAME=$(terraform -chdir=../courtside-infra/envs/prod output -raw ml_endpoint_name)

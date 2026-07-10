@@ -28,6 +28,7 @@ def _load_training_frame(cfg: PipelineConfig) -> pd.DataFrame:
     query.run(
         query_string=sql.format(table=query.table_name),
         output_location=cfg.athena_output_s3,
+        workgroup=cfg.athena_workgroup,
     )
     query.wait()
     return query.as_dataframe()

@@ -62,6 +62,7 @@ def _pipeline_env(cfg: PipelineConfig) -> dict[str, str]:
         "FEATURE_GROUP_NAME": cfg.feature_group_name,
         "FEATURE_STORE_OFFLINE_S3": cfg.offline_store_s3,
         "ATHENA_OUTPUT_S3": cfg.athena_output_s3,
+        "ATHENA_WORKGROUP": cfg.athena_workgroup,
         "SAGEMAKER_ROLE_ARN": cfg.role_arn,
         "MLFLOW_TRACKING_URI": cfg.mlflow_tracking_uri,
         "MODEL_PACKAGE_GROUP": cfg.model_package_group,
