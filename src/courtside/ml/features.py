@@ -126,10 +126,11 @@ def build_training_examples(games_by_player: dict[str, list[Game]]) -> list[Trai
     """
     examples: list[TrainingExample] = []
     for player_id, games in games_by_player.items():
-        ordered = sorted(games, key=lambda g: (g.season_id.hex, g.date))
+        # str(), not .hex — see the same note in ml/feature_store/ingest.py.
+        ordered = sorted(games, key=lambda g: (str(g.season_id), g.date))
         by_season: dict[str, list[Game]] = {}
         for g in ordered:
-            by_season.setdefault(g.season_id.hex, []).append(g)
+            by_season.setdefault(str(g.season_id), []).append(g)
 
         for season_games in by_season.values():
             for i, target in enumerate(season_games):

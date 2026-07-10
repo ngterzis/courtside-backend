@@ -59,9 +59,14 @@ def _load_games_by_player() -> tuple[dict[str, list[Game]], dict[str, list[Game]
     all_by_player: dict[str, list[Game]] = {}
     active_by_player: dict[str, list[Game]] = {}
     for g in games:
-        all_by_player.setdefault(g.player_id.hex, []).append(g)
+        # str(), not .hex: the RDS Data API (used here) returns UUID columns as
+        # plain strings rather than uuid.UUID objects, so .hex isn't available —
+        # see the same note in courtside/db/session.py. str() also works on a real
+        # UUID object (direct psycopg path, e.g. local dev), giving the same
+        # canonical dashed form either way.
+        all_by_player.setdefault(str(g.player_id), []).append(g)
         if g.season_id in active_season_ids:
-            active_by_player.setdefault(g.player_id.hex, []).append(g)
+            active_by_player.setdefault(str(g.player_id), []).append(g)
     return all_by_player, active_by_player
 
 
