@@ -21,8 +21,8 @@ class GameStatsOut(CamelModel):
     blocks: int
     turnovers: int
     fouls: int
-    fg_made: int
-    fg_attempted: int
+    fg2_made: int
+    fg2_attempted: int
     three_made: int
     three_attempted: int
     ft_made: int

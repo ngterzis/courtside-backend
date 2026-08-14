@@ -17,8 +17,8 @@ RAW_STAT_FIELDS: tuple[str, ...] = (
     "blocks",
     "turnovers",
     "fouls",
-    "fg_made",
-    "fg_attempted",
+    "fg2_made",
+    "fg2_attempted",
     "three_made",
     "three_attempted",
     "ft_made",
@@ -31,7 +31,7 @@ PERSONAL_BEST_FIELDS: tuple[str, ...] = (
     "assists",
     "steals",
     "blocks",
-    "fg_made",
+    "fg2_made",
     "three_made",
     "ft_made",
 )
@@ -41,17 +41,21 @@ def _ratio(made: float, attempted: float) -> float:
     return made / attempted if attempted else 0.0
 
 
-def _ts_pct(points: float, fg_attempted: float, ft_attempted: float) -> float:
-    denom = 2 * (fg_attempted + 0.44 * ft_attempted)
+def _ts_pct(
+    points: float, fg2_attempted: float, three_attempted: float, ft_attempted: float
+) -> float:
+    denom = 2 * (fg2_attempted + three_attempted + 0.44 * ft_attempted)
     return points / denom if denom else 0.0
 
 
 def derived_stats(game: Game) -> dict[str, float]:
     return {
-        "fg_pct": _ratio(game.fg_made, game.fg_attempted),
+        "fg_pct": _ratio(game.fg2_made, game.fg2_attempted),
         "three_pct": _ratio(game.three_made, game.three_attempted),
         "ft_pct": _ratio(game.ft_made, game.ft_attempted),
-        "ts_pct": _ts_pct(game.points, game.fg_attempted, game.ft_attempted),
+        "ts_pct": _ts_pct(
+            game.points, game.fg2_attempted, game.three_attempted, game.ft_attempted
+        ),
     }
 
 
@@ -85,11 +89,11 @@ def season_averages(games: list[Game], season_id: UUID) -> dict[str, Any]:
     sums = {f: sum(getattr(g, f) for g in games) for f in RAW_STAT_FIELDS}
     for f, total in sums.items():
         out[f] = total / n
-    out["fg_pct"] = _ratio(sums["fg_made"], sums["fg_attempted"])
+    out["fg_pct"] = _ratio(sums["fg2_made"], sums["fg2_attempted"])
     out["three_pct"] = _ratio(sums["three_made"], sums["three_attempted"])
     out["ft_pct"] = _ratio(sums["ft_made"], sums["ft_attempted"])
     out["ts_pct"] = _ts_pct(
-        sums["points"], sums["fg_attempted"], sums["ft_attempted"]
+        sums["points"], sums["fg2_attempted"], sums["three_attempted"], sums["ft_attempted"]
     )
     return out
 

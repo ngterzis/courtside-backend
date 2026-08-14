@@ -13,8 +13,8 @@ class SeasonAverages(CamelModel):
     blocks: float
     turnovers: float
     fouls: float
-    fg_made: float
-    fg_attempted: float
+    fg2_made: float
+    fg2_attempted: float
     three_made: float
     three_attempted: float
     ft_made: float

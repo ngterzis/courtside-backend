@@ -21,16 +21,16 @@ def _login(client: TestClient) -> dict[str, str]:
 
 
 def test_derived_stats_handles_zero_attempts() -> None:
-    g = _bare_game(fg_made=0, fg_attempted=0, three_made=0, three_attempted=0,
+    g = _bare_game(fg2_made=0, fg2_attempted=0, three_made=0, three_attempted=0,
                    ft_made=0, ft_attempted=0, points=0)
     d = derived_stats(g)
     assert d == {"fg_pct": 0.0, "three_pct": 0.0, "ft_pct": 0.0, "ts_pct": 0.0}
 
 
 def test_derived_stats_ts_pct_formula() -> None:
-    g = _bare_game(points=20, fg_attempted=10, ft_attempted=4)
+    g = _bare_game(points=20, fg2_attempted=10, three_attempted=3, ft_attempted=4)
     d = derived_stats(g)
-    expected_ts = 20 / (2 * (10 + 0.44 * 4))
+    expected_ts = 20 / (2 * (10 + 3 + 0.44 * 4))
     assert abs(d["ts_pct"] - expected_ts) < 1e-9
 
 
@@ -42,8 +42,8 @@ def test_personal_bests_excludes_zero_values() -> None:
 
 
 def test_season_averages_aggregates_correctly() -> None:
-    g1 = _bare_game(points=10, fg_made=4, fg_attempted=10)
-    g2 = _bare_game(points=20, fg_made=8, fg_attempted=10)
+    g1 = _bare_game(points=10, fg2_made=4, fg2_attempted=10)
+    g2 = _bare_game(points=20, fg2_made=8, fg2_attempted=10)
     avg = season_averages([g1, g2], season_id=g1.season_id)
     assert avg["games_played"] == 2
     assert avg["points"] == 15.0
@@ -126,8 +126,8 @@ def _bare_game(**overrides) -> Game:
         blocks=0,
         turnovers=2,
         fouls=2,
-        fg_made=4,
-        fg_attempted=10,
+        fg2_made=4,
+        fg2_attempted=10,
         three_made=2,
         three_attempted=5,
         ft_made=4,
