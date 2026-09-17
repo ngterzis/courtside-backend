@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import anthropic
+from anthropic.types import MessageParam
 
 from courtside.config import get_settings
 
@@ -47,7 +48,7 @@ def generate_archetype_explanation(
 
 async def stream_chat_response(
     system_prompt: str,
-    messages: list[dict[str, str]],
+    messages: list[MessageParam],
 ) -> AsyncIterator[str]:
     settings = get_settings()
     if not settings.anthropic_api_key:
