@@ -8,7 +8,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     Date,
     DateTime,
-    Enum as SAEnum,
     ForeignKey,
     Integer,
     String,
@@ -16,6 +15,9 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column

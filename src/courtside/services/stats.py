@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, TypedDict
 from uuid import UUID
 
 from sqlalchemy import select
@@ -48,7 +48,22 @@ def _ts_pct(
     return points / denom if denom else 0.0
 
 
-def derived_stats(game: Game) -> dict[str, float]:
+class DerivedStats(TypedDict):
+    """The shooting percentages derived from a game's raw counting stats.
+
+    Spelled as a TypedDict rather than dict[str, float] so that callers
+    splatting it into GameStatsOut(**...) type-check: with a bare dict the
+    checker must assume any key could be supplied, and float is not
+    assignable to the thirteen int-typed counting-stat fields.
+    """
+
+    fg_pct: float
+    three_pct: float
+    ft_pct: float
+    ts_pct: float
+
+
+def derived_stats(game: Game) -> DerivedStats:
     return {
         "fg_pct": _ratio(game.fg2_made, game.fg2_attempted),
         "three_pct": _ratio(game.three_made, game.three_attempted),

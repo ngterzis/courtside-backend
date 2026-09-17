@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import bcrypt
@@ -7,8 +7,12 @@ import jwt
 from courtside.config import get_settings
 
 
-class InvalidToken(Exception):
-    pass
+class InvalidTokenError(Exception):
+    """Raised when an access token is malformed, expired, or carries a bad sub.
+
+    Distinct from jwt.InvalidTokenError, which it wraps — callers depend on
+    this module's exception rather than PyJWT's.
+    """
 
 
 def hash_password(password: str) -> str:
@@ -24,7 +28,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_access_token(player_id: UUID) -> str:
     settings = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(player_id),
         "iat": int(now.timestamp()),
@@ -40,11 +44,11 @@ def decode_access_token(token: str) -> UUID:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
     except jwt.InvalidTokenError as exc:
-        raise InvalidToken(str(exc)) from exc
+        raise InvalidTokenError(str(exc)) from exc
     sub = payload.get("sub")
     if not isinstance(sub, str):
-        raise InvalidToken("missing sub")
+        raise InvalidTokenError("missing sub")
     try:
         return UUID(sub)
     except ValueError as exc:
-        raise InvalidToken("invalid sub") from exc
+        raise InvalidTokenError("invalid sub") from exc

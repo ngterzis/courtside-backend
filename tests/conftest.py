@@ -8,6 +8,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from courtside.auth.tokens import hash_password
+from courtside.config import get_settings
 from courtside.db.models import (
     Base,
     Game,
@@ -23,6 +24,23 @@ from courtside.db.session import build_engine, get_db
 from courtside.main import app
 
 
+def _guard_against_remote_db() -> None:
+    """Refuse to run against Aurora via the Data API.
+
+    The `engine` fixture below drops every table before recreating the schema.
+    A local .env with USE_DATA_API=true (as used for prod-style development)
+    makes build_url() return the Data API URL *before* it ever looks at
+    DATABASE_URL, so a bare `pytest` would target the real cluster.
+    """
+    settings = get_settings()
+    if settings.use_data_api:
+        raise RuntimeError(
+            "Refusing to run tests against the RDS Data API "
+            f"(cluster {settings.db_cluster_arn}) — the engine fixture drops every "
+            "table. Set USE_DATA_API=false to point at local Postgres."
+        )
+
+
 def _reset_schema(e: Engine) -> None:
     Base.metadata.drop_all(e)
     with e.begin() as conn:
@@ -31,6 +49,7 @@ def _reset_schema(e: Engine) -> None:
 
 @pytest.fixture(scope="session")
 def engine() -> Iterator[Engine]:
+    _guard_against_remote_db()
     e = build_engine()
     _reset_schema(e)
     Base.metadata.create_all(e)

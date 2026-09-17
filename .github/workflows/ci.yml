@@ -1,0 +1,66 @@
+name: CI
+
+# Lint, type-check and test. Runs on every pull request, and is called by
+# deploy.yml as a required gate before anything is built or shipped — so a
+# push to main runs this suite exactly once, inside the deploy run.
+
+on:
+  pull_request:
+  workflow_call:
+
+# Per-PR runs supersede each other; pushes to main group by SHA, so a queued
+# deploy is never cancelled out from under itself.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint, type-check, test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: courtside
+          POSTGRES_PASSWORD: courtside
+          POSTGRES_DB: courtside
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U courtside"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Settings.database_url (pydantic-settings, no env_prefix). Wins over the
+      # DB_* fields in config.py, and use_data_api stays false, so this is what
+      # db/session.py:build_url() returns. Set at job scope because
+      # get_settings() is lru_cached and conftest builds the engine once.
+      DATABASE_URL: postgresql+psycopg://courtside:courtside@localhost:5432/courtside
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Pyright
+        run: uv run pyright
+
+      - name: Pytest
+        run: uv run pytest

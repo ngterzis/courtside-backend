@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -26,7 +26,7 @@ def onboard(
 ) -> PlayerOut:
     player.jersey_number = payload.jersey_number
     player.position = payload.position
-    player.onboarded_at = datetime.now(timezone.utc)
+    player.onboarded_at = datetime.now(UTC)
     db.commit()
     db.refresh(player)
     return PlayerOut.model_validate(player)

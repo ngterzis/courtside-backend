@@ -46,6 +46,13 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency injection is expressed as call-in-default-argument, which
+# is exactly what B008 flags. These are evaluated per-request by FastAPI, not
+# shared across calls, so the mutable-default hazard B008 guards against does
+# not apply.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
 [tool.pyright]
 include = ["src", "tests"]
 typeCheckingMode = "standard"
