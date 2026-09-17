@@ -38,17 +38,61 @@ SEASON_START = date(2025, 9, 1)
 # exactly (see _normalize), otherwise the user won't link to a player — the guard
 # in main() will fail the seed if that happens.
 SEED_USERS = [
-    {"email": "nikos@courtside.dev", "password": "password123", "player_name": "Τερζής, Νικόλαος"},
-    {"email": "pavlos@courtside.dev", "password": "password123", "player_name": "Πλυτάς, Παύλος"},
-    {"email": "thodoris@courtside.dev", "password": "password123", "player_name": "Σαμαράς, Θοδωρής"},
-    {"email": "dimitris.samaras@courtside.dev", "password": "password123", "player_name": "Samaras, Dimitris"},
-    {"email": "dimitris.padouvas@courtside.dev", "password": "password123", "player_name": "Παδουβας, Δημητρης"},
-    {"email": "nikolas.chatzis@courtside.dev", "password": "password123", "player_name": "Χατζής, Νικόλας"},
-    {"email": "michalis.papakonstantinou@courtside.dev", "password": "password123", "player_name": "Παπακωνσταντινου, Μιχάλης"},
-    {"email": "dimitris.papakonstantinou@courtside.dev", "password": "password123", "player_name": "Παπακωνσταντίνου, Δημήτρης"},
-    {"email": "alexandros.asfis@courtside.dev", "password": "password123", "player_name": "Ασφής, Αλέξανδρος"},
-    {"email": "dimitris.papapantelidis@courtside.dev", "password": "password123", "player_name": "Παπαπαντελίδης, Δημήτρης"},
-    {"email": "apostolos.kyriakopoulos@courtside.dev", "password": "password123", "player_name": "Kyriakopoulos, Apostolos"},
+    {
+        "email": "nikos@courtside.dev",
+        "password": "password123",
+        "player_name": "Τερζής, Νικόλαος",
+    },
+    {
+        "email": "pavlos@courtside.dev",
+        "password": "password123",
+        "player_name": "Πλυτάς, Παύλος",
+    },
+    {
+        "email": "thodoris@courtside.dev",
+        "password": "password123",
+        "player_name": "Σαμαράς, Θοδωρής",
+    },
+    {
+        "email": "dimitris.samaras@courtside.dev",
+        "password": "password123",
+        "player_name": "Samaras, Dimitris",
+    },
+    {
+        "email": "dimitris.padouvas@courtside.dev",
+        "password": "password123",
+        "player_name": "Παδουβας, Δημητρης",
+    },
+    {
+        "email": "nikolas.chatzis@courtside.dev",
+        "password": "password123",
+        "player_name": "Χατζής, Νικόλας",
+    },
+    {
+        "email": "michalis.papakonstantinou@courtside.dev",
+        "password": "password123",
+        "player_name": "Παπακωνσταντινου, Μιχάλης",
+    },
+    {
+        "email": "dimitris.papakonstantinou@courtside.dev",
+        "password": "password123",
+        "player_name": "Παπακωνσταντίνου, Δημήτρης",
+    },
+    {
+        "email": "alexandros.asfis@courtside.dev",
+        "password": "password123",
+        "player_name": "Ασφής, Αλέξανδρος",
+    },
+    {
+        "email": "dimitris.papapantelidis@courtside.dev",
+        "password": "password123",
+        "player_name": "Παπαπαντελίδης, Δημήτρης",
+    },
+    {
+        "email": "apostolos.kyriakopoulos@courtside.dev",
+        "password": "password123",
+        "player_name": "Kyriakopoulos, Apostolos",
+    },
 ]
 
 
@@ -86,8 +130,8 @@ def _wipe(db) -> None:
 def main() -> None:
     rows = list(csv.DictReader(CSV_PATH.open(encoding="utf-8")))
 
-    SessionLocal = get_session_factory()
-    with SessionLocal() as db:
+    session_local = get_session_factory()
+    with session_local() as db:
         _wipe(db)
         db.commit()
 
@@ -112,7 +156,9 @@ def main() -> None:
                 player_map[norm] = player
         db.flush()
 
-        unmatched = [u["email"] for u in SEED_USERS if _normalize(u["player_name"]) not in player_map]
+        unmatched = [
+            u["email"] for u in SEED_USERS if _normalize(u["player_name"]) not in player_map
+        ]
         if unmatched:
             raise SystemExit(
                 f"Seed users with no matching player (check player_name spelling): {unmatched}"
@@ -176,7 +222,8 @@ def main() -> None:
     print(f"  team:    {TEAM_NAME}")
     print(f"  players: {len(player_map)}")
     print(f"  season:  {SEASON_LABEL}")
-    print(f"  games:   {len(rows)} player-game rows across {len({r['match'] + r['date'] for r in rows})} games")
+    game_count = len({r["match"] + r["date"] for r in rows})
+    print(f"  games:   {len(rows)} player-game rows across {game_count} games")
     print()
     print("Logins:")
     for u in SEED_USERS:
