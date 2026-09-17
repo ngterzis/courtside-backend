@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import csv
 import unicodedata
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from sqlalchemy import delete
@@ -106,7 +106,7 @@ def main() -> None:
                     name=norm,
                     jersey_number=0,
                     position=Position.GUARD,
-                    onboarded_at=datetime.now(timezone.utc) if norm in seeded_norms else None,
+                    onboarded_at=datetime.now(UTC) if norm in seeded_norms else None,
                 )
                 db.add(player)
                 player_map[norm] = player

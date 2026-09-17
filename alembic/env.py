@@ -1,7 +1,6 @@
 from logging.config import fileConfig
 
 from alembic import context
-
 from courtside.config import get_settings
 from courtside.db.models import Base
 from courtside.db.session import build_engine, build_url
