@@ -69,6 +69,25 @@ Connection mode is env-driven (see `.env.example`):
 - `DATABASE_URL` — a full SQLAlchemy URL; wins over the discrete fields (the Fargate migration task uses this)
 - `USE_DATA_API=true` — production via the AWS RDS Data API using `DB_CLUSTER_ARN` + `DB_SECRET_ARN` (no VPC required for Lambda)
 
+### Migrations must be backward-compatible
+
+`deploy.yml` migrates *before* it deploys, and rolls the Lambda code back if the
+new image fails its health check. A rollback reverts code; it does not revert
+the schema. So a migration that the previous code cannot run against turns a
+rollback into a second outage rather than a recovery.
+
+Every migration must therefore leave the *previous* release working —
+expand/contract, with destructive changes split across two deploys:
+
+| | Deploy 1 | Deploy 2 |
+|---|---|---|
+| Add a column | add it nullable (or with a default) | start writing it; make it `NOT NULL` |
+| Rename a column | add the new one, write both, read the old | backfill, read the new one |
+| Drop a column | stop reading and writing it | drop it |
+
+Never combine a destructive DDL change with the code that depends on it in one
+deploy.
+
 ## Project layout
 
 ```
