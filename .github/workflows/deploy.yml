@@ -13,11 +13,12 @@ name: Deploy backend
 #   secrets.AWS_DEPLOY_ROLE_ARN        -> terraform output github_actions_role_arn
 #   vars.FARGATE_SUBNET_ID             -> terraform output fargate_subnet_id
 #   vars.FARGATE_SECURITY_GROUP_ID     -> terraform output fargate_security_group_id
-#   vars.API_BASE_URL                  -> terraform output api_base_url
+#   vars.API_BASE_URL                  -> terraform output api_gateway_invoke_url
 #   vars.CHAT_FUNCTION_URL             -> terraform output chat_function_url
 #
-# Both URLs are joined with "/api/health", so neither takes a trailing slash.
-# The chat Function URL must be auth_type NONE for the probe to reach it.
+# Both URLs point at the origins, not at CloudFront: a cached /api/health would
+# let the CDN answer 200 for a Lambda that is failing. A trailing slash on
+# either is fine — the health check strips it.
 
 on:
   push:
@@ -154,8 +155,8 @@ jobs:
 
       - name: Health check
         env:
-          API_URL: ${{ vars.API_BASE_URL }}/api/health
-          CHAT_URL: ${{ vars.CHAT_FUNCTION_URL }}/api/health
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          CHAT_FUNCTION_URL: ${{ vars.CHAT_FUNCTION_URL }}
         run: |
           probe() {
             local name=$1 url=$2 body
@@ -174,10 +175,15 @@ jobs:
             return 1
           }
 
+          # terraform's api_gateway_invoke_url and chat_function_url both end in
+          # a slash, and "//api/health" does not match the route.
+          api="${API_BASE_URL%/}/api/health"
+          chat="${CHAT_FUNCTION_URL%/}/api/health"
+
           # Both functions run the same image, so both get probed — a deploy
           # that only breaks chat is still a broken deploy.
-          probe "API" "$API_URL"
-          probe "chat" "$CHAT_URL"
+          probe "API" "$api"
+          probe "chat" "$chat"
 
       # Reached only when the deploy ran and something after it failed, so the
       # broken image is live. Restores the images recorded above.
