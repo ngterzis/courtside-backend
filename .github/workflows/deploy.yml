@@ -4,10 +4,20 @@ name: Deploy backend
 # and chat Lambdas. Infra (ECR repo, Lambdas, OIDC role, migration task) lives
 # in the courtside-infra repo.
 #
+# A deploy that fails its post-deploy health check is rolled back to the image
+# that was live before it: see "Record the live images" and "Roll back" below.
+# Rollback reverts code only — migrations must stay backward-compatible with the
+# previous release (see README, "Migrations must be backward-compatible").
+#
 # Required GitHub config:
 #   secrets.AWS_DEPLOY_ROLE_ARN        -> terraform output github_actions_role_arn
 #   vars.FARGATE_SUBNET_ID             -> terraform output fargate_subnet_id
 #   vars.FARGATE_SECURITY_GROUP_ID     -> terraform output fargate_security_group_id
+#   vars.API_BASE_URL                  -> terraform output api_base_url
+#   vars.CHAT_FUNCTION_URL             -> terraform output chat_function_url
+#
+# Both URLs are joined with "/api/health", so neither takes a trailing slash.
+# The chat Function URL must be auth_type NONE for the probe to reach it.
 
 on:
   push:
@@ -44,6 +54,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fail before anything ships rather than after: without these URLs the
+      # health check cannot run, and a deploy with no health check has no
+      # rollback either.
+      - name: Check deploy configuration
+        run: |
+          missing=()
+          [ -n "${{ vars.API_BASE_URL }}" ] || missing+=(API_BASE_URL)
+          [ -n "${{ vars.CHAT_FUNCTION_URL }}" ] || missing+=(CHAT_FUNCTION_URL)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository variables: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -53,6 +76,24 @@ jobs:
       - name: Log in to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
+
+      # Where a rollback goes back to, captured before the build so the :latest
+      # tag still resolves to the currently-live image. ResolvedImageUri is the
+      # digest form: rolling back by tag would be meaningless here, since the
+      # build below moves :latest onto the new image.
+      - name: Record the live images
+        id: live
+        run: |
+          for fn in "$API_FUNCTION" "$CHAT_FUNCTION"; do
+            aws lambda get-function --function-name "$fn" \
+              --query 'Code.[ImageUri,ResolvedImageUri]' --output text
+          done
+          api=$(aws lambda get-function --function-name "$API_FUNCTION" \
+            --query 'Code.ResolvedImageUri' --output text)
+          chat=$(aws lambda get-function --function-name "$CHAT_FUNCTION" \
+            --query 'Code.ResolvedImageUri' --output text)
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+          echo "chat=$chat" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         id: build
@@ -93,6 +134,7 @@ jobs:
           fi
 
       - name: Deploy to Lambda
+        id: deploy
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: |
@@ -102,3 +144,65 @@ jobs:
               --function-name "$fn" \
               --image-uri "$IMAGE" >/dev/null
           done
+
+          # update-function-code returns while LastUpdateStatus is still
+          # InProgress. Without this wait the health check below can be served
+          # by the old image and pass on code that was never exercised.
+          for fn in "$API_FUNCTION" "$CHAT_FUNCTION"; do
+            aws lambda wait function-updated --function-name "$fn"
+          done
+
+      - name: Health check
+        env:
+          API_URL: ${{ vars.API_BASE_URL }}/api/health
+          CHAT_URL: ${{ vars.CHAT_FUNCTION_URL }}/api/health
+        run: |
+          probe() {
+            local name=$1 url=$2 body
+            for attempt in $(seq 1 5); do
+              # No -f: on a 503 we want the body, since it carries the reason
+              # the check failed. A connection error still fails the call.
+              body=$(curl -sS --max-time 15 "$url") || body=""
+              if [ "$(printf '%s' "$body" | jq -r '.status // empty')" = "ok" ]; then
+                echo "$name healthy: $body"
+                return 0
+              fi
+              echo "$name attempt $attempt/5 not healthy${body:+: $body}"
+              if [ "$attempt" -lt 5 ]; then sleep 10; fi
+            done
+            echo "::error::$name failed its health check after 5 attempts"
+            return 1
+          }
+
+          # Both functions run the same image, so both get probed — a deploy
+          # that only breaks chat is still a broken deploy.
+          probe "API" "$API_URL"
+          probe "chat" "$CHAT_URL"
+
+      # Reached only when the deploy ran and something after it failed, so the
+      # broken image is live. Restores the images recorded above.
+      - name: Roll back
+        if: failure() && steps.deploy.outcome != 'skipped'
+        env:
+          API_IMAGE: ${{ steps.live.outputs.api }}
+          CHAT_IMAGE: ${{ steps.live.outputs.chat }}
+        run: |
+          if [ -z "$API_IMAGE" ] || [ -z "$CHAT_IMAGE" ]; then
+            echo "::error::No recorded images to roll back to — roll back by hand"
+            exit 1
+          fi
+
+          echo "::warning::Deploy failed — rolling back to the previous images"
+
+          aws lambda update-function-code --function-name "$API_FUNCTION" \
+            --image-uri "$API_IMAGE" >/dev/null
+          aws lambda update-function-code --function-name "$CHAT_FUNCTION" \
+            --image-uri "$CHAT_IMAGE" >/dev/null
+
+          for fn in "$API_FUNCTION" "$CHAT_FUNCTION"; do
+            aws lambda wait function-updated --function-name "$fn"
+          done
+
+          echo "Rolled back API to:  $API_IMAGE"
+          echo "Rolled back chat to: $CHAT_IMAGE"
+          echo "::error::Rolled back to the previous images. The schema is still at the migrated revision — confirm it is compatible with the restored code."
