@@ -431,3 +431,7 @@ All error responses:
 
 Standard HTTP status codes: 400 bad request, 401 unauthenticated, 403 forbidden,
 404 not found, 422 validation error, 500 server error.
+
+503 `database_resuming`: Aurora Serverless is waking from auto-pause. The
+response carries a `Retry-After` header (seconds). Clients should wait and
+retry the same request; resuming usually takes under 30 seconds.
