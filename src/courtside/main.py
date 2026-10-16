@@ -1,11 +1,14 @@
 from fastapi import FastAPI
 
+from courtside.config import get_settings
 from courtside.errors import install_error_handlers
+from courtside.origin import OriginVerifyMiddleware
 from courtside.routes import archetype, auth, chat, games, health, me, seasons, stats
 
 app = FastAPI(title="Courtside API", version="0.1.0")
 
 install_error_handlers(app)
+app.add_middleware(OriginVerifyMiddleware, secret=get_settings().origin_secret)
 
 app.include_router(auth.router)
 app.include_router(me.router)

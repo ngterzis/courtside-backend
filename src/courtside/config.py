@@ -30,6 +30,10 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
 
+    # Shared secret CloudFront sends as X-Origin-Verify. Unset locally, which
+    # disables the check (see courtside.origin).
+    origin_secret: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:
