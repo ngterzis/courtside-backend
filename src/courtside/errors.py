@@ -33,7 +33,7 @@ _STATUS_CODES: dict[int, str] = {
 _RESUME_RETRY_AFTER = 5
 
 
-def _is_database_resuming(exc: BaseException) -> bool:
+def is_database_resuming(exc: BaseException) -> bool:
     """True when Aurora rejected the call because it is waking from auto-pause.
 
     The Data API raises a botocore ClientError with this code, which SQLAlchemy
@@ -97,7 +97,7 @@ def install_error_handlers(app: FastAPI) -> None:
     async def statement_error_handler(
         _: Request, exc: StatementError
     ) -> JSONResponse:
-        if not _is_database_resuming(exc):
+        if not is_database_resuming(exc):
             # Unchanged behaviour for real failures: ServerErrorMiddleware logs
             # the traceback and returns a 500.
             raise exc

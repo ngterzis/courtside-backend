@@ -1,0 +1,72 @@
+name: Evals
+
+# Runs the chat eval suite (evals/) against the real Claude API. It costs API
+# credits, so it only runs on demand: from the Actions tab, or on a pull
+# request labelled `run-evals`. Requires the ANTHROPIC_API_KEY secret;
+# LANGFUSE_* secrets are optional and upload the run as a Langfuse experiment.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-evals'
+    name: Chat evals
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: courtside
+          POSTGRES_PASSWORD: courtside
+          POSTGRES_DB: courtside
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U courtside"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://courtside:courtside@localhost:5432/courtside
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST || 'https://cloud.langfuse.com' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Migrate
+        run: uv run alembic upgrade head
+
+      - name: Run evals
+        run: uv run python -m evals.run --out eval-results.md
+
+      - name: Publish scorecard
+        if: always()
+        run: |
+          if [ -f eval-results.md ]; then cat eval-results.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: eval-results.*
+          if-no-files-found: ignore

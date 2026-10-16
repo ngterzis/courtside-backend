@@ -13,7 +13,8 @@ Implements the contract defined in [`BACKEND.md`](./BACKEND.md).
 - **Python 3.12** + **FastAPI** + **Pydantic v2** (camelCase JSON via `alias_generator`)
 - **SQLAlchemy 2.0** + **Alembic** — Postgres in Docker locally, Aurora Serverless v2 via the **RDS Data API** in production
 - **Custom JWT** (HS256) + **bcrypt** — no Cognito
-- **Anthropic SDK** — Haiku 4.5 for archetype prose, Sonnet 4.6 for chat
+- **Anthropic SDK**: Haiku 4.5 for archetype prose, Sonnet 4.6 for the tool-using chat agent
+- **Langfuse**: LLM tracing, user-feedback scores and eval runs
 - **AWS Lambda** + **Lambda Web Adapter** — the same FastAPI app runs locally under uvicorn and inside Lambda
   - `/api/chat` is a separate Lambda behind a Function URL in `RESPONSE_STREAM` mode (SSE)
   - everything else is behind API Gateway REST
@@ -88,6 +89,72 @@ expand/contract, with destructive changes split across two deploys:
 Never combine a destructive DDL change with the code that depends on it in one
 deploy.
 
+## Chat agent, observability & evals
+
+`POST /api/chat` is a small tool-using agent. The system prompt carries a compact
+player card; everything game-level is fetched through five **read-only,
+player-scoped tools** (`services/chat_tools.py`). No tool accepts a player id,
+so "never discuss teammates" is enforced in code, not only in the prompt. The
+loop (`anthropic_client.stream_chat_events`) streams text from every round over
+SSE, sends a `status` event while tools run, returns all of a round's results
+in one message, and stops after 5 tool rounds.
+
+### Tracing
+
+Every turn is one [Langfuse](https://langfuse.com) trace (OpenTelemetry under
+the hood):
+
+```
+chat.turn (agent)          user message → answer, rounds, tool calls, prompt version, user id
+├── llm.round.1 (generation)  model, messages, tokens incl. prompt-cache reads, TTFT, stop reason
+├── find_games (tool)         arguments → JSON result (ERROR level when the tool failed)
+└── llm.round.2 (generation)
+```
+
+Tracing turns on when `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` are set and
+is a no-op otherwise. A one-line JSON summary per turn is always logged.
+Traces are flushed before the Lambda response ends (after `[DONE]` has been
+sent, so a slow exporter never delays the answer). Users rate answers through
+`POST /api/chat/feedback`, which records a `user_feedback` score on the trace.
+
+### Offline evals
+
+`evals/` holds 18 cases over a deterministic fixture league: lookups, game
+detail, splits, past seasons, policy (teammates, playing time, prompt
+injection) and no-data questions. Grading goes cheapest first:
+
+1. **Code checks**: the expected tool was called, the right numbers appear in
+   the answer (expected values computed from the fixture, not from the tools),
+   no teammate names or numbers leak.
+2. **LLM judge** (Haiku 4.5, structured output): grounded in the tool results,
+   follows policy, helpfulness 1–5.
+
+```bash
+USE_DATA_API=false uv run python -m evals.run --out evals/RESULTS.md
+USE_DATA_API=false uv run python -m evals.run --no-tools   # negative control
+```
+
+The negative control runs the same cases without tools and should fail. It
+caught a lenient judge: the model invented `<tool_response>` text, and the
+judge counted it as evidence until its prompt was tightened. With Langfuse keys
+set, each run is uploaded as a dataset run named `<prompt version>@<git sha>`
+so runs can be compared case by case. Runs cost API credits, so they run on
+demand (`Evals` workflow), not on every push.
+
+Latest run:
+
+### Eval run `2026-10-16.tools-v1@36c5443` (model `claude-sonnet-4-6`)
+
+| Category | Passed | Facts | Grounded | Policy | Helpfulness |
+|---|---|---|---|---|---|
+| game_detail | 2/2 | 100% | 100% | 100% | 100% |
+| lookup | 5/5 | 100% | 100% | 100% | 100% |
+| no_data | 2/2 | 100% | 100% | 100% | 100% |
+| past_seasons | 2/2 | 100% | 100% | 100% | 100% |
+| policy | 4/4 | – | 100% | 100% | 100% |
+| splits | 3/3 | 100% | 100% | 100% | 100% |
+| **all** | 18/18 | 100% | 100% | 100% | 100% |
+
 ## Project layout
 
 ```
@@ -107,6 +174,12 @@ src/courtside/
   auth/
     tokens.py         # JWT sign/verify + bcrypt
     deps.py           # get_current_player FastAPI dependency
+  services/
+    chat.py           # player card + cached static system prompt
+    chat_tools.py     # read-only DB tools for the chat agent
+  anthropic_client.py # Claude calls, chat tool loop
+  observability.py    # Langfuse tracing + feedback scores
+evals/                # chat eval suite: fixture, cases, graders, runner
 alembic/              # migrations
 tests/                # pytest suite
 docker-compose.yml    # local Postgres
@@ -133,6 +206,8 @@ pyproject.toml        # deps managed by uv
 | POST | `/api/auth/logout` | none |
 | GET  | `/api/me` | bearer |
 | POST | `/api/me/onboard` | bearer |
+| POST | `/api/chat` | bearer (SSE) |
+| POST | `/api/chat/feedback` | bearer |
 
 More to come — see `BACKEND.md` for the full contract.
 

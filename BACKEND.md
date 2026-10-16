@@ -302,61 +302,73 @@ POST /api/chat
 
 ### SSE format
 
-Each token chunk:
-```
-data: {"text":"<token>"}\n\n
-```
-
-Terminator:
-```
-data: [DONE]\n\n
-```
-
-The frontend's SSE parser (`src/routes/chat.tsx → readSSE`) expects exactly this
-format. Do not send any other event types or field names.
-
-### Context injection (server-side, never sent from client)
-
-Before calling the Anthropic API, prepend a system message that includes:
+Every event is one `data:` line holding a JSON object with exactly one field,
+except the terminator:
 
 ```
-You are Courtside Agent, a basketball analytics assistant for a recreational league.
-Answer questions about the player's own stats only. Never name or compare teammates.
-Do not speculate about playing time, injuries, or coaching decisions.
-Be concise and specific — reference actual numbers.
-
-Player: {name}, #{jerseyNumber}, {position}
-Season: {seasonLabel} ({gamesPlayed} games)
-
-Season averages:
-  PTS {points} | AST {assists} | REB {rebounds} | STL {steals}
-  TOV {turnovers} | TS% {tsPct} | FG% {fgPct} | 3PT% {threePct}
-
-Archetype: {primary} / {secondary}
-  "{explanation}"
-
-Recent games (last 5, newest first):
-  {date} vs {opponent} ({H|A}): {points}pts {rebounds}reb {assists}ast
-  ...
-
-Last game highlights: {personalBests if any}
+data: {"feedback":"<token>"}\n\n     // optional, first: rate this answer (see below)
+data: {"status":"Looking up your games…"}\n\n   // between tool rounds
+data: {"text":"<token>"}\n\n        // answer text, streamed
+data: [DONE]\n\n                    // always last
 ```
 
-Inject real values at request time. Fetch the player's current season averages,
-archetype, and last 5 games from your database — do not trust any context the
-client sends.
+- `text` — append to the assistant message. Text from separate model rounds
+  arrives already separated by a blank line.
+- `status` — the agent is querying the database. Show it as a transient
+  indicator; clear it when the next `text` arrives.
+- `feedback` — sent only when tracing is enabled. Store it with the assistant
+  message and send it to `POST /api/chat/feedback` if the user rates the answer.
+- Clients must ignore unknown fields so new event kinds can be added safely.
 
-### Streaming
+If something fails after the stream started, the server sends a final `text`
+apology followed by `[DONE]` rather than dropping the connection.
 
-Use the Anthropic SDK with `stream: true`. Forward each `text_delta` event directly
-to the SSE response as `data: {"text":"<delta>"}\n\n`. When the stream ends, write
-`data: [DONE]\n\n` and close the connection.
+### Feedback
+
+```
+POST /api/chat/feedback
+  Headers: Authorization: Bearer <token>
+  Body:    { token: string, score: 1 | -1, comment?: string }
+  200:     {}
+  400:     { error: "invalid_feedback_token" }
+  403:     { error: "forbidden" }            // the answer belongs to another player
+```
+
+The feedback token is a signed, 7-day token binding the answer's trace to the
+player. It cannot be used as an access token.
+
+### Context (server-side, never sent from the client)
+
+The system prompt has two blocks:
+
+1. **Static instructions** (cached prompt prefix, identical for every request):
+   role, guardrails, "use the tools for anything game-level or historical; never
+   invent numbers".
+2. **Player card**: today's date, player, active season, season averages and
+   archetype.
+
+Everything else is fetched on demand through read-only tools
+(`src/courtside/services/chat_tools.py`):
+
+| Tool | Answers |
+|---|---|
+| `list_seasons` | "last season", season ids, games played |
+| `get_season_summary` | averages, totals and record for any season |
+| `find_games` | filter by season/opponent/dates/result/home-away, sort by any stat |
+| `get_game` | full box score, season highs set, coach note |
+| `get_split_averages` | home vs away, wins vs losses, per opponent, per month, last N |
+
+Every tool is scoped to the authenticated player in code. No tool takes a player
+id, so the model cannot be talked into reading a teammate's data. A turn is
+capped at 5 tool rounds; after that one final call runs with tools disabled.
 
 ### Guardrails (system prompt)
 
 - No teammate names or comparisons
 - No off-topic responses (not about their stats → politely decline)
 - No speculation about playing time, injuries, or coaching decisions
+
+These are checked on every change by the eval suite (`evals/`, see README).
 
 ---
 
@@ -416,7 +428,8 @@ When the real backend is ready, replace the mock implementations in
 `src/lib/queries.ts`. Each `useQuery` currently returns mock data — swap
 each `queryFn` to call `fetch('/api/...')` and return the parsed JSON.
 
-The `POST /api/chat` endpoint is already wired in `src/routes/chat.tsx`.
+The `POST /api/chat` endpoint is already wired in `src/routes/chat.tsx`
+(including the `status` and `feedback` events above).
 The Vite dev plugin in `vite.config.ts` (`mock-chat-api`) can be removed
 once a real server handles `/api/chat`.
 

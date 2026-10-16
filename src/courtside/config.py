@@ -30,6 +30,13 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str | None = None
 
+    # LLM tracing (courtside.observability). Unset keys disable it.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+    # Tags traces with the deployed build so eval/feedback scores map to code.
+    git_sha: str | None = None
+
     # Shared secret CloudFront sends as X-Origin-Verify. Unset locally, which
     # disables the check (see courtside.origin).
     origin_secret: str | None = None
