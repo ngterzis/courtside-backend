@@ -30,6 +30,11 @@ COPY alembic ./alembic
 COPY alembic.ini ./
 RUN uv sync --frozen --no-dev
 
+# Build identity, attached to LLM traces (Settings.git_sha). Declared last so a
+# new commit doesn't invalidate the dependency layers above.
+ARG GIT_SHA
+ENV GIT_SHA=${GIT_SHA}
+
 EXPOSE 8000
 
 # API and chat Lambdas serve the web app; the migration ECS task overrides this

@@ -12,3 +12,9 @@ class ChatMessage(CamelModel):
 
 class ChatRequest(CamelModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=50)
+
+
+class ChatFeedback(CamelModel):
+    token: str = Field(min_length=1, max_length=2000)
+    score: Literal[1, -1]
+    comment: str | None = Field(default=None, max_length=1000)
