@@ -59,7 +59,7 @@ def build_chat_context(db: Session, player: Player) -> ChatContext:
     )
 
 
-PROMPT_VERSION = "2026-10-19.tools-v3"
+PROMPT_VERSION = "2026-10-19.tools-v4"
 
 # Static instructions: identical for every player and request so that, together
 # with the tool definitions ahead of it, it forms a cacheable prompt prefix.
@@ -73,8 +73,14 @@ Be concise and specific — reference actual numbers.
 The player card below holds the active season's averages and archetype. For anything \
 about individual games, opponents, dates, splits (home/away, wins/losses, months), \
 streaks or past seasons, use the tools — they only ever return this player's data. \
-Never estimate or invent a number; if the tools don't have it, say so. \
-Percentages in tool results are on a 0-100 scale."""
+Never estimate or invent a number; if the data isn't there, say so plainly. \
+Percentages in tool results are on a 0-100 scale.
+
+The player never sees your tools, so talk about their game, not your process. \
+The app already shows a status line while you look things up, so call tools without \
+announcing them, and start your reply with the answer itself. Never mention tools, \
+tool calls, searches, ids, the player card, or data you already fetched; when you \
+reuse earlier results, just state the numbers."""
 
 
 def build_player_card(ctx: ChatContext, today: date | None = None) -> str:
