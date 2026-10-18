@@ -119,7 +119,7 @@ sent, so a slow exporter never delays the answer). Users rate answers through
 
 ### Offline evals
 
-`evals/` holds 18 cases over a deterministic fixture league: lookups, game
+`evals/` holds 19 cases over a deterministic fixture league: lookups, game
 detail, splits, past seasons, policy (teammates, playing time, prompt
 injection) and no-data questions. Grading goes cheapest first:
 
@@ -143,17 +143,17 @@ demand (`Evals` workflow), not on every push.
 
 Latest run:
 
-### Eval run `2026-10-16.tools-v1@36c5443` (model `claude-sonnet-4-6`)
+### Eval run `2026-10-19.tools-v2@26843b4` (model `claude-sonnet-4-6`)
 
 | Category | Passed | Facts | Grounded | Policy | Helpfulness |
 |---|---|---|---|---|---|
 | game_detail | 2/2 | 100% | 100% | 100% | 100% |
-| lookup | 5/5 | 100% | 100% | 100% | 100% |
+| lookup | 6/6 | 100% | 100% | 100% | 100% |
 | no_data | 2/2 | 100% | 100% | 100% | 100% |
 | past_seasons | 2/2 | 100% | 100% | 100% | 100% |
 | policy | 4/4 | – | 100% | 100% | 100% |
 | splits | 3/3 | 100% | 100% | 100% | 100% |
-| **all** | 18/18 | 100% | 100% | 100% | 100% |
+| **all** | 19/19 | 100% | 100% | 100% | 100% |
 
 ## Project layout
 
