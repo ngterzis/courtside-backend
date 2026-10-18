@@ -78,6 +78,19 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # The Dockerfile pulls the Lambda Web Adapter from public.ecr.aws.
+      # Anonymous pulls from shared GitHub runner IPs can fail with "429 Data
+      # limit exceeded"; authenticated pulls get a far higher allowance. Logging
+      # in only raises that limit, so a failure here (e.g. before the deploy
+      # role has the ecr-public permissions) falls back to an anonymous pull.
+      - name: Log in to Amazon ECR Public
+        continue-on-error: true
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+        env:
+          AWS_REGION: us-east-1 # ECR Public auth is only served from us-east-1
+
       # Where a rollback goes back to, captured before the build so the :latest
       # tag still resolves to the currently-live image. ResolvedImageUri is the
       # digest form: rolling back by tag would be meaningless here, since the
