@@ -91,6 +91,8 @@ deploy.
 
 ## Chat agent, observability & evals
 
+> Full write-up of the implementation: [docs/chat-agent.md](docs/chat-agent.md).
+
 `POST /api/chat` is a small tool-using agent. The system prompt carries a compact
 player card; everything game-level is fetched through five **read-only,
 player-scoped tools** (`services/chat_tools.py`). No tool accepts a player id,
