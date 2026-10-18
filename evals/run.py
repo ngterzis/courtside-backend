@@ -202,8 +202,8 @@ def upload_to_langfuse(results: list[dict[str, Any]], run_name: str) -> None:
         metadata={"prompt_version": PROMPT_VERSION, "model": SONNET_MODEL},
     )
     lf.flush()
-    if result.dataset_run_url:
-        print(f"Langfuse run: {result.dataset_run_url}")
+    if result.experiment_url:
+        print(f"Langfuse run: {result.experiment_url}")
 
 
 if __name__ == "__main__":

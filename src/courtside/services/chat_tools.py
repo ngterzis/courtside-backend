@@ -44,8 +44,11 @@ SortField = Literal[
     "turnovers",
     "fouls",
     "fg2_made",
+    "fg2_attempted",
     "three_made",
+    "three_attempted",
     "ft_made",
+    "ft_attempted",
     "fg_pct",
     "three_pct",
     "ft_pct",
@@ -170,8 +173,18 @@ def _game_row(game: Game) -> dict[str, Any]:
         "steals": game.steals,
         "blocks": game.blocks,
         "turnovers": game.turnovers,
+        "fouls": game.fouls,
+        # Makes and attempts, not just percentages, so questions about shot
+        # volume can be answered from find_games rows without a get_game per game.
+        "fg2_made": game.fg2_made,
+        "fg2_attempted": game.fg2_attempted,
+        "three_made": game.three_made,
+        "three_attempted": game.three_attempted,
+        "ft_made": game.ft_made,
+        "ft_attempted": game.ft_attempted,
         "fg_pct": round(d["fg_pct"] * 100, 1),
         "three_pct": round(d["three_pct"] * 100, 1),
+        "ft_pct": round(d["ft_pct"] * 100, 1),
         "ts_pct": round(d["ts_pct"] * 100, 1),
     }
 
@@ -319,13 +332,6 @@ def get_game(db: Session, player: Player, args: GetGameInput) -> dict[str, Any]:
     return {
         **_game_row(game),
         "season": season.label if season else None,
-        "fouls": game.fouls,
-        "shooting": {
-            "fg2": f"{game.fg2_made}/{game.fg2_attempted}",
-            "three": f"{game.three_made}/{game.three_attempted}",
-            "ft": f"{game.ft_made}/{game.ft_attempted}",
-            "ft_pct": round(derived_stats(game)["ft_pct"] * 100, 1),
-        },
         "season_highs_set": personal_bests(game, season_games),
         "coach_note": {"author": note.author_name, "text": note.text} if note else None,
     }
@@ -395,8 +401,9 @@ _TOOLS: tuple[_Tool, ...] = (
     ),
     _Tool(
         "find_games",
-        "Search the player's games with filters, sorted by date or any stat. Returns compact "
-        "box-score rows (percentages are 0-100) plus total_matched/truncated. Use for "
+        "Search the player's games with filters, sorted by date or any stat. Returns full "
+        "box-score rows including shot makes and attempts (percentages are 0-100) plus "
+        "total_matched/truncated. Use for "
         "\"best game\", \"games vs X\", \"last 3 losses\", streaks and date ranges.",
         FindGamesInput,
         find_games,
@@ -404,7 +411,7 @@ _TOOLS: tuple[_Tool, ...] = (
     ),
     _Tool(
         "get_game",
-        "Full detail for one game: box score, shooting splits, season highs set that game "
+        "One game's box score plus what find_games doesn't have: season highs set that game "
         "and the coach's note. Pass game_id (from find_games) or the date.",
         GetGameInput,
         get_game,

@@ -47,6 +47,15 @@ def _reset_schema(e: Engine) -> None:
         conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
 
 
+@pytest.fixture(autouse=True)
+def _tracing_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never trace from tests, even when .env holds real Langfuse keys.
+
+    Tests that check tracing patch in a fake client on top of this.
+    """
+    monkeypatch.setattr("courtside.observability.get_langfuse", lambda: None)
+
+
 @pytest.fixture(scope="session")
 def engine() -> Iterator[Engine]:
     _guard_against_remote_db()

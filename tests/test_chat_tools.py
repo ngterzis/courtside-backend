@@ -111,6 +111,14 @@ def test_find_games_sorts_filters_and_truncates(
     out, _ = _run(db, player, "find_games", {"opponent": "hawks"})
     assert {g["opponent"] for g in out["games"]} == {"Hawks", "Night Hawks"}
 
+    # Rows carry makes and attempts, not only percentages.
+    row = out["games"][0]
+    assert (row["fg2_made"], row["fg2_attempted"]) == (8, 16)
+    assert (row["three_attempted"], row["ft_attempted"]) == (4, 2)
+
+    out, err = _run(db, player, "find_games", {"sort_by": "three_attempted"})
+    assert not err
+
     out, _ = _run(db, player, "find_games", {"result": "L"})
     assert [g["opponent"] for g in out["games"]] == ["Bulls"]
 

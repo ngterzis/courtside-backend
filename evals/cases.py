@@ -42,6 +42,7 @@ _spring_pts = [g.points for g in SPRING]
 _best = max(SPRING, key=lambda g: g.points)
 _last = SPRING[-1]
 _titans = next(g for g in SPRING if g.opponent == "Titans")
+_most_fta = max(SPRING, key=lambda g: g.ft[1])
 
 CASES: tuple[Case, ...] = (
     # --- lookups -------------------------------------------------------------
@@ -80,6 +81,15 @@ CASES: tuple[Case, ...] = (
         "Show me my three lowest scoring games this season.",
         expect_tools=("find_games",),
         expect_numbers=tuple(sorted(_spring_pts)[:3]),
+    ),
+    Case(
+        "most_ft_attempts",
+        "lookup",
+        "In which game this season did I attempt the most free throws, and how many?",
+        expect_tools=("find_games",),
+        expect_numbers=(_most_fta.ft[1],),
+        expect_phrases=(_most_fta.opponent,),
+        notes="Needs shot attempts from find_games rows (regression: rows had only %).",
     ),
     # --- game detail ----------------------------------------------------------
     Case(
