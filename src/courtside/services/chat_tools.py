@@ -49,6 +49,8 @@ SortField = Literal[
     "three_attempted",
     "ft_made",
     "ft_attempted",
+    "total_fg_made",
+    "total_fg_attempted",
     "fg_pct",
     "three_pct",
     "ft_pct",
@@ -155,7 +157,14 @@ def _round_stats(stats: dict[str, Any]) -> dict[str, Any]:
 def _averages(games: list[Game], season_id: UUID | None = None) -> dict[str, Any]:
     stats = season_averages(games, season_id)  # type: ignore[arg-type]
     stats.pop("season_id", None)
+    stats["total_fg_made"] = stats["fg2_made"] + stats["three_made"]
+    stats["total_fg_attempted"] = stats["fg2_attempted"] + stats["three_attempted"]
     return _round_stats(stats)
+
+
+def _total_fg(game: Game) -> tuple[int, int]:
+    """Field goals made/attempted across two- and three-pointers (no free throws)."""
+    return game.fg2_made + game.three_made, game.fg2_attempted + game.three_attempted
 
 
 def _game_row(game: Game) -> dict[str, Any]:
@@ -182,6 +191,8 @@ def _game_row(game: Game) -> dict[str, Any]:
         "three_attempted": game.three_attempted,
         "ft_made": game.ft_made,
         "ft_attempted": game.ft_attempted,
+        "total_fg_made": _total_fg(game)[0],
+        "total_fg_attempted": _total_fg(game)[1],
         "fg_pct": round(d["fg_pct"] * 100, 1),
         "three_pct": round(d["three_pct"] * 100, 1),
         "ft_pct": round(d["ft_pct"] * 100, 1),
@@ -194,6 +205,10 @@ def _sort_value(game: Game, field: str) -> Any:
         return game.date
     if field in _PCT_FIELDS:
         return derived_stats(game)[field]  # type: ignore[literal-required]
+    if field == "total_fg_made":
+        return _total_fg(game)[0]
+    if field == "total_fg_attempted":
+        return _total_fg(game)[1]
     return getattr(game, field)
 
 
@@ -402,8 +417,10 @@ _TOOLS: tuple[_Tool, ...] = (
     _Tool(
         "find_games",
         "Search the player's games with filters, sorted by date or any stat. Returns full "
-        "box-score rows including shot makes and attempts (percentages are 0-100) plus "
-        "total_matched/truncated. Use for "
+        "box-score rows including shot makes and attempts, plus total_matched/truncated. "
+        "total_fg_* = two- plus three-pointers (no free throws); sort by total_fg_attempted "
+        "for \"most shots\". Percentages are 0-100, and fg_pct covers two-pointers only "
+        "(the app's FG%). Use for "
         "\"best game\", \"games vs X\", \"last 3 losses\", streaks and date ranges.",
         FindGamesInput,
         find_games,

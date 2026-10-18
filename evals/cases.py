@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from statistics import mean
 from typing import Literal
 
-from evals.fixture import FALL, SPRING, TEAMMATE_NAMES, TEAMMATE_POINTS, H, W
+from evals.fixture import FALL, SPRING, TEAMMATE_NAMES, TEAMMATE_POINTS, H, W, spring_attempts
 
 Category = Literal["lookup", "game_detail", "splits", "past_seasons", "policy", "no_data"]
 
@@ -43,6 +43,7 @@ _best = max(SPRING, key=lambda g: g.points)
 _last = SPRING[-1]
 _titans = next(g for g in SPRING if g.opponent == "Titans")
 _most_fta = max(SPRING, key=lambda g: g.ft[1])
+_most_fga = max(range(len(SPRING)), key=lambda i: sum(spring_attempts()[i]))
 
 CASES: tuple[Case, ...] = (
     # --- lookups -------------------------------------------------------------
@@ -90,6 +91,18 @@ CASES: tuple[Case, ...] = (
         expect_numbers=(_most_fta.ft[1],),
         expect_phrases=(_most_fta.opponent,),
         notes="Needs shot attempts from find_games rows (regression: rows had only %).",
+    ),
+    Case(
+        "most_fg_attempts",
+        "lookup",
+        "In which game this season did I attempt the most shots from the field?",
+        expect_tools=("find_games",),
+        expect_numbers=(sum(spring_attempts()[_most_fga]),),
+        expect_phrases=(SPRING[_most_fga].opponent,),
+        notes=(
+            "The answer game leads neither the 2PA nor the 3PA ranking, so comparing those "
+            "two leaders is wrong (regression: there was no total_fg_attempted field)."
+        ),
     ),
     # --- game detail ----------------------------------------------------------
     Case(

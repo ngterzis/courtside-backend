@@ -59,7 +59,7 @@ def build_chat_context(db: Session, player: Player) -> ChatContext:
     )
 
 
-PROMPT_VERSION = "2026-10-19.tools-v2"
+PROMPT_VERSION = "2026-10-19.tools-v3"
 
 # Static instructions: identical for every player and request so that, together
 # with the tool definitions ahead of it, it forms a cacheable prompt prefix.

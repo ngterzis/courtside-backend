@@ -37,6 +37,8 @@ class FixtureGame:
     assists: int
     ft: tuple[int, int]
     note: str | None = None
+    # (2PA, 3PA) override; makes are always derived from points.
+    attempts: tuple[int, int] | None = None
 
 
 H, A = HomeAway.HOME, HomeAway.AWAY
@@ -61,8 +63,11 @@ SPRING: tuple[FixtureGame, ...] = (
         (9, 10),
         note="Attacked the rim all night. Keep that aggression.",
     ),
-    FixtureGame("Rockets", A, L, 17, 5, 7, (5, 6)),
-    FixtureGame("Comets", A, W, 21, 6, 9, (3, 3)),
+    # Shot volume is set so the game with the most field-goal attempts (Comets
+    # away, 20+8) leads neither the 2PA list (Bulls home, 23) nor the 3PA list
+    # (Rockets, 10): comparing the two leaders gives the wrong game.
+    FixtureGame("Rockets", A, L, 17, 5, 7, (5, 6), attempts=(13, 10)),
+    FixtureGame("Comets", A, W, 21, 6, 9, (3, 3), attempts=(20, 8)),
 )
 SPRING_START = date(2026, 3, 7)
 
@@ -80,6 +85,18 @@ FALL_START = date(2025, 9, 13)
 TEAMMATE_POINTS = (40, 35)
 
 
+def attempts(g: FixtureGame) -> tuple[int, int]:
+    """(2PA, 3PA) as stored for this game."""
+    remaining = g.points - g.ft[0]
+    three_made = remaining % 2
+    fg2_made = (remaining - 3 * three_made) // 2
+    return g.attempts or (fg2_made * 2 + 1, three_made * 3)
+
+
+def spring_attempts() -> list[tuple[int, int]]:
+    return [attempts(g) for g in SPRING]
+
+
 def spring_dates() -> list[date]:
     return [SPRING_START + timedelta(weeks=i) for i in range(len(SPRING))]
 
@@ -92,6 +109,7 @@ def _to_game(
     remaining = g.points - ft_made
     three_made = remaining % 2  # an odd remainder takes one three
     fg2_made = (remaining - 3 * three_made) // 2
+    fg2_att, three_att = attempts(g)
     return Game(
         team_id=team.id,
         player_id=player.id,
@@ -110,9 +128,9 @@ def _to_game(
         turnovers=2,
         fouls=2,
         fg2_made=fg2_made,
-        fg2_attempted=fg2_made * 2 + 1,
+        fg2_attempted=fg2_att,
         three_made=three_made,
-        three_attempted=three_made * 3,
+        three_attempted=three_att,
         ft_made=ft_made,
         ft_attempted=ft_att,
     )

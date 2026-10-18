@@ -118,6 +118,8 @@ def test_find_games_sorts_filters_and_truncates(
 
     out, err = _run(db, player, "find_games", {"sort_by": "three_attempted"})
     assert not err
+    # Totals combine two- and three-pointers (free throws excluded).
+    assert (row["total_fg_made"], row["total_fg_attempted"]) == (9, 20)
 
     out, _ = _run(db, player, "find_games", {"result": "L"})
     assert [g["opponent"] for g in out["games"]] == ["Bulls"]
@@ -248,3 +250,22 @@ def test_unknown_tool_and_status_labels(db: Session, player: Player) -> None:
     assert err
     assert status_for(["find_games"]) == "Looking up your games…"
     assert status_for(["find_games", "get_game"]) == "Looking things up…"
+
+
+def test_find_games_sorts_by_total_field_goal_attempts(
+    db: Session, team: Team, player: Player, current_season: Season
+) -> None:
+    # The most total attempts leads neither the 2PA nor the 3PA ranking.
+    shapes = {"Inside": (24, 0), "Outside": (6, 12), "Balanced": (18, 9)}
+    for i, (name, (fg2a, threea)) in enumerate(shapes.items()):
+        g = _game(team, player, current_season, date(2026, 3, 7) + timedelta(days=i), opponent=name)
+        g.fg2_attempted, g.three_attempted = fg2a, threea
+        db.add(g)
+    db.flush()
+
+    out, _ = _run(db, player, "find_games", {"sort_by": "total_fg_attempted", "limit": 1})
+    assert out["games"][0]["opponent"] == "Balanced"
+    assert out["games"][0]["total_fg_attempted"] == 27
+
+    out, _ = _run(db, player, "get_season_summary")
+    assert out["averages"]["total_fg_attempted"] == 23.0

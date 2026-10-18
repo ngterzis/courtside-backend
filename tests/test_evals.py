@@ -19,6 +19,7 @@ def test_fixture_box_scores_add_up(db: Session) -> None:
     assert len(games) == len(fixture.SPRING) + len(fixture.FALL)
     for g in games:
         assert g.fg2_made * 2 + g.three_made * 3 + g.ft_made == g.points
+        assert g.fg2_made <= g.fg2_attempted and g.three_made <= g.three_attempted
 
 
 def test_expected_numbers_match_what_the_tools_return(db: Session) -> None:
