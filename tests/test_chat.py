@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 
 from courtside import anthropic_client
 from courtside.anthropic_client import MAX_TOOL_ROUNDS
+from courtside.auth.deps import get_current_player
 from courtside.auth.tokens import create_feedback_token, decode_access_token
 from courtside.config import get_settings
 from courtside.db.models import Archetype, Game, Player, Season, User
+from courtside.main import app
 from courtside.services.chat import (
     STATIC_INSTRUCTIONS,
     build_chat_context,
@@ -349,6 +351,28 @@ def test_chat_trace_tree_and_feedback_token(
             "comment": "wrong number",
         }
     ]
+
+
+def test_feedback_accepts_string_player_ids_from_the_data_api(
+    client: TestClient,
+    user: User,
+    player: Player,
+    fake_langfuse: FakeLangfuse,
+) -> None:
+    # Production reads players through the RDS Data API, which returns UUID
+    # columns as strings; the ownership check must still match.
+    as_data_api = Player(
+        id=str(player.id),  # type: ignore[arg-type]
+        team_id=player.team_id,
+        name=player.name,
+        jersey_number=player.jersey_number,
+        position=player.position,
+    )
+    app.dependency_overrides[get_current_player] = lambda: as_data_api
+    token = create_feedback_token("c" * 32, player.id)
+    r = client.post("/api/chat/feedback", json={"token": token, "score": 1})
+    assert r.status_code == 200
+    assert fake_langfuse.scores[0]["trace_id"] == "c" * 32
 
 
 def test_feedback_rejects_other_players_and_bad_tokens(
