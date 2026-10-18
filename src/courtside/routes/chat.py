@@ -3,6 +3,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
+from uuid import UUID
 
 from anthropic.types import MessageParam, TextBlockParam
 from fastapi import Depends
@@ -132,7 +133,9 @@ def chat_feedback(
         trace_id, player_id = decode_feedback_token(payload.token)
     except InvalidTokenError as exc:
         raise APIError(400, "invalid_feedback_token", "Feedback token is invalid") from exc
-    if player_id != player.id:
+    # Normalise both sides: the RDS Data API returns UUID columns as strings, so
+    # in production player.id is a str and a bare UUID == str check always fails.
+    if player_id != UUID(str(player.id)):
         raise APIError(403, "forbidden", "This answer belongs to another player")
     record_feedback(trace_id, payload.score, payload.comment)
     return {}
