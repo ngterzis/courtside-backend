@@ -16,6 +16,7 @@ dependencies = [
     "bcrypt>=4.2",
     "anthropic>=0.40",
     "boto3>=1.35",
+    "langfuse>=5.0.2",
 ]
 
 [dependency-groups]
@@ -54,7 +55,7 @@ select = ["E", "F", "I", "B", "UP", "N", "SIM"]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "evals"]
 typeCheckingMode = "standard"
 pythonVersion = "3.12"
 
