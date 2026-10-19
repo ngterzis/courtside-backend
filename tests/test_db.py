@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from courtside.db.models import (
     Game,
+    GamePerformance,
     HomeAway,
     Notification,
     NotificationType,
@@ -48,8 +49,6 @@ def test_can_create_game_with_stats(db: Session) -> None:
     db.flush()
 
     game = Game(
-        team_id=team.id,
-        player_id=player.id,
         season_id=season.id,
         date=date(2026, 3, 10),
         opponent="Rivals",
@@ -57,6 +56,13 @@ def test_can_create_game_with_stats(db: Session) -> None:
         result=Result.WIN,
         team_score=88,
         opponent_score=72,
+    )
+    db.add(game)
+    db.flush()
+
+    perf = GamePerformance(
+        game_id=game.id,
+        player_id=player.id,
         points=22,
         rebounds=5,
         assists=7,
@@ -71,11 +77,12 @@ def test_can_create_game_with_stats(db: Session) -> None:
         ft_made=3,
         ft_attempted=4,
     )
-    db.add(game)
+    db.add(perf)
     db.flush()
 
-    assert game.id is not None
-    assert game.points == 22
+    assert perf.id is not None
+    assert perf.points == 22
+    assert perf.game.opponent == "Rivals"
 
 
 def test_notification_payload_jsonb(db: Session) -> None:

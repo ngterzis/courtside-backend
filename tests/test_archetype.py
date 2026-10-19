@@ -3,7 +3,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from courtside.db.models import Game, Player, Season, User
+from courtside.db.models import GamePerformance, Player, Season, User
+from tests.factories import add_performance
 
 
 def _login(client: TestClient) -> dict[str, str]:
@@ -32,36 +33,23 @@ def test_archetype_404_when_fewer_than_three_games(
 ) -> None:
     from datetime import date
 
-    from courtside.db.models import HomeAway, Result
-
     for i in range(2):
-        db.add(
-            Game(
-                team_id=team.id,
-                player_id=player.id,
-                season_id=current_season.id,
-                date=date(2026, 3, 7 + i * 7),
-                opponent="X",
-                home_away=HomeAway.HOME,
-                result=Result.WIN,
-                team_score=80,
-                opponent_score=70,
-                points=10,
-                rebounds=4,
-                assists=3,
-                steals=1,
-                blocks=0,
-                turnovers=2,
-                fouls=2,
-                fg2_made=4,
-                fg2_attempted=10,
-                three_made=1,
-                three_attempted=3,
-                ft_made=1,
-                ft_attempted=2,
-            )
+        add_performance(
+            db,
+            player,
+            current_season,
+            date(2026, 3, 7 + i * 7),
+            opponent="X",
+            points=10,
+            rebounds=4,
+            assists=3,
+            fg2_made=4,
+            fg2_attempted=10,
+            three_made=1,
+            three_attempted=3,
+            ft_made=1,
+            ft_attempted=2,
         )
-    db.flush()
 
     r = client.get("/api/me/archetype", headers=_login(client))
     assert r.status_code == 404
@@ -72,9 +60,9 @@ def test_archetype_returns_primary_secondary_and_receipt(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     teammates: list[Player],
-    teammate_games: list[Game],
+    teammate_games: list[GamePerformance],
 ) -> None:
     with patch(
         "courtside.routes.archetype.generate_archetype_explanation",
@@ -116,9 +104,9 @@ def test_archetype_cached_on_second_call(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     teammates: list[Player],
-    teammate_games: list[Game],
+    teammate_games: list[GamePerformance],
 ) -> None:
     with patch(
         "courtside.routes.archetype.generate_archetype_explanation",
@@ -141,9 +129,9 @@ def test_archetype_history_returns_one_per_season(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     teammates: list[Player],
-    teammate_games: list[Game],
+    teammate_games: list[GamePerformance],
 ) -> None:
     with patch(
         "courtside.routes.archetype.generate_archetype_explanation",

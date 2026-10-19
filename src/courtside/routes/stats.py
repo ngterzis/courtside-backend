@@ -5,11 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from courtside.auth.deps import get_current_player
-from courtside.db.models import Game, Player, Season
+from courtside.db.models import Player, Season
 from courtside.db.session import get_db
 from courtside.errors import APIError
 from courtside.routes import CamelRouter
 from courtside.schemas.stats import SeasonAverages, TeamRank
+from courtside.services.games import player_performances
 from courtside.services.stats import season_averages, team_ranks
 
 router = CamelRouter(tags=["stats"])
@@ -36,13 +37,7 @@ def get_season_averages(
 ) -> SeasonAverages:
     if season_id is None:
         season_id = _current_season_id(db, player.team_id)
-    games = list(
-        db.scalars(
-            select(Game).where(
-                Game.player_id == player.id, Game.season_id == season_id
-            )
-        ).all()
-    )
+    games = player_performances(db, player.id, season_id)
     return SeasonAverages.model_validate(season_averages(games, season_id))
 
 

@@ -15,7 +15,7 @@ from courtside.anthropic_client import MAX_TOOL_ROUNDS
 from courtside.auth.deps import get_current_player
 from courtside.auth.tokens import create_feedback_token, decode_access_token
 from courtside.config import get_settings
-from courtside.db.models import Archetype, Game, Player, Season, User
+from courtside.db.models import Archetype, GamePerformance, Player, Season, User
 from courtside.main import app
 from courtside.services.chat import (
     STATIC_INSTRUCTIONS,
@@ -137,7 +137,11 @@ def _chat(client: TestClient, text: str = "How am I doing?") -> list[Any]:
 
 
 def test_chat_streams_plain_answer(
-    client: TestClient, user: User, current_season: Season, main_games: list[Game], fake_llm
+    client: TestClient,
+    user: User,
+    current_season: Season,
+    main_games: list[GamePerformance],
+    fake_llm,
 ) -> None:
     with fake_llm(_message(_text("Hello there!"))) as fake:
         events = _chat(client)
@@ -155,7 +159,7 @@ def test_chat_runs_tools_and_returns_results_to_the_model(
     user: User,
     player: Player,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     fake_llm,
 ) -> None:
     best = max(main_games, key=lambda g: g.points)
@@ -246,7 +250,7 @@ def test_chat_requires_auth(client: TestClient) -> None:
 
 
 def test_chat_validates_request(
-    client: TestClient, user: User, current_season: Season, main_games: list[Game]
+    client: TestClient, user: User, current_season: Season, main_games: list[GamePerformance]
 ) -> None:
     r = client.post("/api/chat", json={"messages": []}, headers=_login(client))
     assert r.status_code == 422
@@ -306,7 +310,7 @@ def test_chat_trace_tree_and_feedback_token(
     user: User,
     player: Player,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     fake_llm,
     fake_langfuse: FakeLangfuse,
 ) -> None:
@@ -403,7 +407,7 @@ def test_feedback_rejects_other_players_and_bad_tokens(
 
 
 def test_system_prompt_is_cached_static_block_plus_card(
-    db: Session, player: Player, current_season: Season, main_games: list[Game]
+    db: Session, player: Player, current_season: Season, main_games: list[GamePerformance]
 ) -> None:
     blocks = build_system_prompt(build_chat_context(db, player), today=date(2026, 4, 1))
     assert blocks[0]["text"] == STATIC_INSTRUCTIONS
@@ -429,9 +433,9 @@ def test_system_prompt_omits_teammate_names(
     db: Session,
     player: Player,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     teammates: list[Player],
-    teammate_games: list[Game],
+    teammate_games: list[GamePerformance],
 ) -> None:
     blocks = build_system_prompt(build_chat_context(db, player))
     prompt = "\n".join(b["text"] for b in blocks)
@@ -444,7 +448,7 @@ def test_system_prompt_includes_cached_archetype(
     team,
     player: Player,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     db.add(
         Archetype(

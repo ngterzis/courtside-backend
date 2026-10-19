@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from courtside.db.models import CoachNote, Game, Player, Season, User
+from courtside.db.models import CoachNote, GamePerformance, Player, Season, User
 
 
 def _login(client: TestClient) -> dict[str, str]:
@@ -15,7 +15,7 @@ def test_list_my_games_defaults_to_current_season(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     r = client.get("/api/me/games", headers=_login(client))
     assert r.status_code == 200
@@ -30,7 +30,7 @@ def test_list_games_pagination(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     r = client.get(
         "/api/me/games?limit=1&offset=1", headers=_login(client)
@@ -45,7 +45,7 @@ def test_game_response_shape(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     r = client.get("/api/me/games", headers=_login(client))
     g = r.json()["games"][0]
@@ -60,7 +60,7 @@ def test_personal_bests_marks_top_game(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     r = client.get("/api/me/games", headers=_login(client))
     games = r.json()["games"]
@@ -74,7 +74,7 @@ def test_last_game_returns_most_recent(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     r = client.get("/api/me/games/last", headers=_login(client))
     assert r.status_code == 200
@@ -97,7 +97,7 @@ def test_get_game_by_id(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     target = main_games[0]
     r = client.get(f"/api/games/{target.id}", headers=_login(client))
@@ -110,7 +110,7 @@ def test_get_game_404_when_other_player(
     user: User,
     current_season: Season,
     teammates: list[Player],
-    teammate_games: list[Game],
+    teammate_games: list[GamePerformance],
 ) -> None:
     foreign_game = teammate_games[0]
     r = client.get(f"/api/games/{foreign_game.id}", headers=_login(client))
@@ -122,13 +122,13 @@ def test_game_includes_coach_note(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     db,
     team,
 ) -> None:
     note = CoachNote(
         team_id=team.id,
-        game_id=main_games[-1].id,
+        performance_id=main_games[-1].id,
         author_name="Coach",
         text="Nice work tonight.",
     )

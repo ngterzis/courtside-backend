@@ -11,17 +11,16 @@ from courtside.auth.tokens import hash_password
 from courtside.config import get_settings
 from courtside.db.models import (
     Base,
-    Game,
-    HomeAway,
+    GamePerformance,
     Player,
     Position,
-    Result,
     Season,
     Team,
     User,
 )
 from courtside.db.session import build_engine, get_db
 from courtside.main import app
+from tests.factories import add_performance
 
 
 def _guard_against_remote_db() -> None:
@@ -160,97 +159,43 @@ def teammates(db: Session, team: Team) -> list[Player]:
     return mates
 
 
-def _build_game(
-    *,
-    team_id,
-    player_id,
-    season_id,
-    game_date: date,
-    points: int = 20,
-    rebounds: int = 5,
-    assists: int = 4,
-    steals: int = 1,
-    blocks: int = 0,
-    turnovers: int = 2,
-    fouls: int = 2,
-    fg2_made: int = 8,
-    fg2_attempted: int = 16,
-    three_made: int = 2,
-    three_attempted: int = 6,
-    ft_made: int = 4,
-    ft_attempted: int = 5,
-    result: Result = Result.WIN,
-) -> Game:
-    return Game(
-        team_id=team_id,
-        player_id=player_id,
-        season_id=season_id,
-        date=game_date,
-        opponent="Rivals",
-        home_away=HomeAway.HOME,
-        result=result,
-        team_score=80 if result == Result.WIN else 70,
-        opponent_score=70 if result == Result.WIN else 80,
-        points=points,
-        rebounds=rebounds,
-        assists=assists,
-        steals=steals,
-        blocks=blocks,
-        turnovers=turnovers,
-        fouls=fouls,
-        fg2_made=fg2_made,
-        fg2_attempted=fg2_attempted,
-        three_made=three_made,
-        three_attempted=three_attempted,
-        ft_made=ft_made,
-        ft_attempted=ft_attempted,
-    )
-
-
 @pytest.fixture
 def main_games(
-    db: Session, team: Team, player: Player, current_season: Season
-) -> list[Game]:
+    db: Session, player: Player, current_season: Season
+) -> list[GamePerformance]:
     base = date(2026, 3, 7)
-    games = [
-        _build_game(
-            team_id=team.id,
-            player_id=player.id,
-            season_id=current_season.id,
-            game_date=base + timedelta(weeks=i),
+    return [
+        add_performance(
+            db,
+            player,
+            current_season,
+            base + timedelta(weeks=i),
             points=18 + 2 * i,
             assists=3 + i,
         )
         for i in range(3)
     ]
-    db.add_all(games)
-    db.flush()
-    return games
 
 
 @pytest.fixture
 def teammate_games(
     db: Session,
-    team: Team,
     teammates: list[Player],
     current_season: Season,
-) -> list[Game]:
+) -> list[GamePerformance]:
+    """The teammates' lines in the same three games as main_games."""
     base = date(2026, 3, 7)
-    games: list[Game] = []
-    for idx, p in enumerate(teammates):
-        for i in range(3):
-            games.append(
-                _build_game(
-                    team_id=team.id,
-                    player_id=p.id,
-                    season_id=current_season.id,
-                    game_date=base + timedelta(weeks=i),
-                    points=10 + idx,
-                    rebounds=6 + idx,
-                    assists=2,
-                    steals=1,
-                )
-            )
-    db.add_all(games)
-    db.flush()
-    return games
+    return [
+        add_performance(
+            db,
+            p,
+            current_season,
+            base + timedelta(weeks=i),
+            points=10 + idx,
+            rebounds=6 + idx,
+            assists=2,
+            steals=1,
+        )
+        for idx, p in enumerate(teammates)
+        for i in range(3)
+    ]

@@ -1,8 +1,8 @@
-from datetime import date
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from courtside.db.models import Game, HomeAway, Player, Result, Season, Team, User
+from courtside.db.models import GamePerformance, Player, Season, User
 from courtside.services.stats import (
     _label_for,
     _percentile_for_rank,
@@ -44,7 +44,7 @@ def test_personal_bests_excludes_zero_values() -> None:
 def test_season_averages_aggregates_correctly() -> None:
     g1 = _bare_game(points=10, fg2_made=4, fg2_attempted=10)
     g2 = _bare_game(points=20, fg2_made=8, fg2_attempted=10)
-    avg = season_averages([g1, g2], season_id=g1.season_id)
+    avg = season_averages([g1, g2], season_id=uuid4())
     assert avg["games_played"] == 2
     assert avg["points"] == 15.0
     assert avg["fg_pct"] == 12 / 20
@@ -70,7 +70,7 @@ def test_season_averages_endpoint(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
 ) -> None:
     r = client.get("/api/me/season-averages", headers=_login(client))
     assert r.status_code == 200
@@ -86,9 +86,9 @@ def test_team_ranks_endpoint(
     client: TestClient,
     user: User,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     teammates: list[Player],
-    teammate_games: list[Game],
+    teammate_games: list[GamePerformance],
 ) -> None:
     r = client.get("/api/me/team-ranks", headers=_login(client))
     assert r.status_code == 200
@@ -108,17 +108,9 @@ def test_team_ranks_endpoint(
     }
 
 
-def _bare_game(**overrides) -> Game:
+def _bare_game(**overrides) -> GamePerformance:
+    """A stat line that is never saved, for the pure stat functions."""
     defaults = dict(
-        team_id=Team(name="T").id,
-        player_id=Player(team_id=Team(name="T").id, name="P", jersey_number=1, position="Guard").id,
-        season_id=Season(team_id=Team(name="T").id, label="S", start_date=date(2026, 1, 1)).id,
-        date=date(2026, 3, 1),
-        opponent="X",
-        home_away=HomeAway.HOME,
-        result=Result.WIN,
-        team_score=80,
-        opponent_score=70,
         points=10,
         rebounds=5,
         assists=4,
@@ -134,4 +126,4 @@ def _bare_game(**overrides) -> Game:
         ft_attempted=5,
     )
     defaults.update(overrides)
-    return Game(**defaults)
+    return GamePerformance(**defaults)

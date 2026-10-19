@@ -6,7 +6,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from courtside.db.models import Game, Player
+from courtside.db.models import Player
+from courtside.services.games import player_performances
 from courtside.services.stats import season_averages
 
 ARCHETYPE_WEIGHTS: dict[str, dict[str, float]] = {
@@ -116,13 +117,7 @@ def _team_averages(
     players = list(db.scalars(select(Player).where(Player.team_id == team_id)).all())
     out: dict[UUID, dict[str, float]] = {}
     for p in players:
-        games = list(
-            db.scalars(
-                select(Game).where(
-                    Game.player_id == p.id, Game.season_id == season_id
-                )
-            ).all()
-        )
+        games = player_performances(db, p.id, season_id)
         if not games:
             continue
         out[p.id] = season_averages(games, season_id)

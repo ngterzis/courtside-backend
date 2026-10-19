@@ -8,7 +8,8 @@ from anthropic.types import TextBlockParam
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from courtside.db.models import Archetype, Game, Player, Season
+from courtside.db.models import Archetype, Player, Season
+from courtside.services.games import player_performances
 from courtside.services.stats import season_averages
 
 
@@ -36,13 +37,7 @@ def build_chat_context(db: Session, player: Player) -> ChatContext:
             archetype=None,
         )
 
-    games = list(
-        db.scalars(
-            select(Game)
-            .where(Game.player_id == player.id, Game.season_id == season.id)
-            .order_by(Game.date.desc())
-        ).all()
-    )
+    games = player_performances(db, player.id, season.id)
     averages = season_averages(games, season.id) if games else None
     archetype = db.scalar(
         select(Archetype).where(

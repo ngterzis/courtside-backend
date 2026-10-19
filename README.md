@@ -177,6 +177,7 @@ src/courtside/
     tokens.py         # JWT sign/verify + bcrypt
     deps.py           # get_current_player FastAPI dependency
   services/
+    games.py          # a player's performances with their games; get_or_create_game
     chat.py           # player card + cached static system prompt
     chat_tools.py     # read-only DB tools for the chat agent
   anthropic_client.py # Claude calls, chat tool loop

@@ -7,7 +7,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from courtside.db.models import Game, Player
+from courtside.db.models import GamePerformance, Player
+from courtside.services.games import player_performances
 
 RAW_STAT_FIELDS: tuple[str, ...] = (
     "points",
@@ -63,7 +64,7 @@ class DerivedStats(TypedDict):
     ts_pct: float
 
 
-def derived_stats(game: Game) -> DerivedStats:
+def derived_stats(game: GamePerformance) -> DerivedStats:
     return {
         "fg_pct": _ratio(game.fg2_made, game.fg2_attempted),
         "three_pct": _ratio(game.three_made, game.three_attempted),
@@ -74,7 +75,9 @@ def derived_stats(game: Game) -> DerivedStats:
     }
 
 
-def personal_bests(game: Game, season_games: Iterable[Game]) -> list[str]:
+def personal_bests(
+    game: GamePerformance, season_games: Iterable[GamePerformance]
+) -> list[str]:
     games = list(season_games)
     if not games:
         return []
@@ -89,7 +92,7 @@ def personal_bests(game: Game, season_games: Iterable[Game]) -> list[str]:
     return bests
 
 
-def season_averages(games: list[Game], season_id: UUID) -> dict[str, Any]:
+def season_averages(games: list[GamePerformance], season_id: UUID) -> dict[str, Any]:
     n = len(games)
     out: dict[str, Any] = {"season_id": season_id, "games_played": n}
     if n == 0:
@@ -124,13 +127,7 @@ def team_ranks(
     players = list(db.scalars(select(Player).where(Player.team_id == team_id)).all())
     averages_by_player: dict[UUID, dict[str, Any]] = {}
     for p in players:
-        games = list(
-            db.scalars(
-                select(Game).where(
-                    Game.player_id == p.id, Game.season_id == season_id
-                )
-            ).all()
-        )
+        games = player_performances(db, p.id, season_id)
         if not games:
             continue
         averages_by_player[p.id] = season_averages(games, season_id)
