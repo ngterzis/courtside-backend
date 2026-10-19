@@ -20,7 +20,7 @@ from sqlalchemy import (
     Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def _enum(enum_cls: type[StrEnum], length: int) -> SAEnum:
@@ -111,11 +111,11 @@ class Season(Base):
 
 
 class Game(Base):
-    __tablename__ = "game_performances"
+    """One game the team played. Player stat lines live in GamePerformance."""
+
+    __tablename__ = "games"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"), index=True)
-    player_id: Mapped[UUID] = mapped_column(ForeignKey("players.id"), index=True)
     season_id: Mapped[UUID] = mapped_column(ForeignKey("seasons.id"), index=True)
 
     date: Mapped[date] = mapped_column(Date, index=True)
@@ -124,6 +124,27 @@ class Game(Base):
     result: Mapped[Result] = mapped_column(_enum(Result, 1))
     team_score: Mapped[int] = mapped_column(Integer)
     opponent_score: Mapped[int] = mapped_column(Integer)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "season_id", "date", "opponent", name="uq_games_season_date_opponent"
+        ),
+    )
+
+
+class GamePerformance(Base):
+    """One player's stat line in one game."""
+
+    __tablename__ = "game_performances"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    game_id: Mapped[UUID] = mapped_column(ForeignKey("games.id"), index=True)
+    player_id: Mapped[UUID] = mapped_column(ForeignKey("players.id"), index=True)
+    game: Mapped[Game] = relationship()
 
     points: Mapped[int] = mapped_column(Integer)
     rebounds: Mapped[int] = mapped_column(Integer)
@@ -143,13 +164,21 @@ class Game(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    __table_args__ = (
+        UniqueConstraint(
+            "game_id", "player_id", name="uq_game_performances_game_player"
+        ),
+    )
+
 
 class CoachNote(Base):
+    """A coach's note on one player's performance in a game."""
+
     __tablename__ = "coach_notes"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"), index=True)
-    game_id: Mapped[UUID] = mapped_column(
+    performance_id: Mapped[UUID] = mapped_column(
         ForeignKey("game_performances.id"), unique=True
     )
     author_name: Mapped[str] = mapped_column(String(120))

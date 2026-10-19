@@ -5,8 +5,17 @@ from typing import Any
 import pytest
 from sqlalchemy.orm import Session
 
-from courtside.db.models import CoachNote, Game, HomeAway, Player, Result, Season, Team
+from courtside.db.models import (
+    CoachNote,
+    GamePerformance,
+    HomeAway,
+    Player,
+    Result,
+    Season,
+    Team,
+)
 from courtside.services.chat_tools import execute_tool, status_for, tool_definitions
+from tests.factories import add_performance
 
 
 def _run(db: Session, player: Player, name: str, args: dict[str, Any] | None = None):
@@ -15,7 +24,7 @@ def _run(db: Session, player: Player, name: str, args: dict[str, Any] | None = N
 
 
 def _game(
-    team: Team,
+    db: Session,
     player: Player,
     season: Season,
     day: date,
@@ -24,26 +33,16 @@ def _game(
     home_away: HomeAway = HomeAway.HOME,
     result: Result = Result.WIN,
     points: int = 20,
-) -> Game:
-    return Game(
-        team_id=team.id,
-        player_id=player.id,
-        season_id=season.id,
-        date=day,
+) -> GamePerformance:
+    return add_performance(
+        db,
+        player,
+        season,
+        day,
         opponent=opponent,
         home_away=home_away,
         result=result,
-        team_score=80,
-        opponent_score=70,
         points=points,
-        rebounds=5,
-        assists=4,
-        steals=1,
-        blocks=0,
-        turnovers=2,
-        fouls=2,
-        fg2_made=8,
-        fg2_attempted=16,
         three_made=1,
         three_attempted=4,
         ft_made=1,
@@ -53,13 +52,13 @@ def _game(
 
 @pytest.fixture
 def varied_games(
-    db: Session, team: Team, player: Player, current_season: Season
-) -> list[Game]:
+    db: Session, player: Player, current_season: Season
+) -> list[GamePerformance]:
     base = date(2026, 3, 7)
-    games = [
-        _game(team, player, current_season, base, opponent="Hawks", points=12),
+    return [
+        _game(db, player, current_season, base, opponent="Hawks", points=12),
         _game(
-            team,
+            db,
             player,
             current_season,
             base + timedelta(weeks=1),
@@ -69,7 +68,7 @@ def varied_games(
             points=31,
         ),
         _game(
-            team,
+            db,
             player,
             current_season,
             base + timedelta(weeks=5),
@@ -78,9 +77,6 @@ def varied_games(
             points=18,
         ),
     ]
-    db.add_all(games)
-    db.flush()
-    return games
 
 
 def test_tool_definitions_are_stable_and_schema_only() -> None:
@@ -100,7 +96,7 @@ def test_tool_definitions_are_stable_and_schema_only() -> None:
 
 
 def test_find_games_sorts_filters_and_truncates(
-    db: Session, player: Player, varied_games: list[Game]
+    db: Session, player: Player, varied_games: list[GamePerformance]
 ) -> None:
     out, err = _run(db, player, "find_games", {"sort_by": "points", "limit": 2})
     assert not err
@@ -131,7 +127,7 @@ def test_find_games_sorts_filters_and_truncates(
 
 
 def test_find_games_rejects_bad_arguments(
-    db: Session, player: Player, varied_games: list[Game]
+    db: Session, player: Player, varied_games: list[GamePerformance]
 ) -> None:
     out, err = _run(db, player, "find_games", {"limit": 500, "player_id": "x"})
     assert err
@@ -140,10 +136,12 @@ def test_find_games_rejects_bad_arguments(
 
 
 def test_get_game_by_id_and_date_with_coach_note(
-    db: Session, team: Team, player: Player, varied_games: list[Game]
+    db: Session, team: Team, player: Player, varied_games: list[GamePerformance]
 ) -> None:
     best = varied_games[1]
-    db.add(CoachNote(team_id=team.id, game_id=best.id, author_name="Coach K", text="Huge."))
+    db.add(
+        CoachNote(team_id=team.id, performance_id=best.id, author_name="Coach K", text="Huge.")
+    )
     db.flush()
 
     out, err = _run(db, player, "get_game", {"game_id": str(best.id)})
@@ -152,14 +150,14 @@ def test_get_game_by_id_and_date_with_coach_note(
     assert out["coach_note"] == {"author": "Coach K", "text": "Huge."}
     assert "points" in out["season_highs_set"]
 
-    out, err = _run(db, player, "get_game", {"date": best.date.isoformat()})
+    out, err = _run(db, player, "get_game", {"date": best.game.date.isoformat()})
     assert not err and out["game_id"] == str(best.id)
 
     out, err = _run(db, player, "get_game", {})
     assert err
 
 
-def test_split_averages(db: Session, player: Player, varied_games: list[Game]) -> None:
+def test_split_averages(db: Session, player: Player, varied_games: list[GamePerformance]) -> None:
     out, err = _run(db, player, "get_split_averages", {"group_by": "home_away"})
     assert not err
     groups = {g["group"]: g for g in out["groups"]}
@@ -182,10 +180,9 @@ def test_seasons_and_summaries(
     player: Player,
     current_season: Season,
     previous_season: Season,
-    varied_games: list[Game],
+    varied_games: list[GamePerformance],
 ) -> None:
-    db.add(_game(team, player, previous_season, date(2025, 10, 1), points=40))
-    db.flush()
+    _game(db, player, previous_season, date(2025, 10, 1), points=40)
 
     out, _ = _run(db, player, "list_seasons")
     by_label = {s["label"]: s for s in out["seasons"]}
@@ -212,9 +209,9 @@ def test_tools_never_return_teammate_data(
     team: Team,
     player: Player,
     current_season: Season,
-    main_games: list[Game],
+    main_games: list[GamePerformance],
     teammates: list[Player],
-    teammate_games: list[Game],
+    teammate_games: list[GamePerformance],
 ) -> None:
     own_ids = {str(g.id) for g in main_games}
     out, _ = _run(db, player, "find_games", {"season_id": "all", "limit": 25})
@@ -258,9 +255,8 @@ def test_find_games_sorts_by_total_field_goal_attempts(
     # The most total attempts leads neither the 2PA nor the 3PA ranking.
     shapes = {"Inside": (24, 0), "Outside": (6, 12), "Balanced": (18, 9)}
     for i, (name, (fg2a, threea)) in enumerate(shapes.items()):
-        g = _game(team, player, current_season, date(2026, 3, 7) + timedelta(days=i), opponent=name)
+        g = _game(db, player, current_season, date(2026, 3, 7) + timedelta(days=i), opponent=name)
         g.fg2_attempted, g.three_attempted = fg2a, threea
-        db.add(g)
     db.flush()
 
     out, _ = _run(db, player, "find_games", {"sort_by": "total_fg_attempted", "limit": 1})

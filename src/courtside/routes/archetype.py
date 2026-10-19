@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from courtside.anthropic_client import generate_archetype_explanation
 from courtside.auth.deps import get_current_player
-from courtside.db.models import Archetype, Game, Player, Season
+from courtside.db.models import Archetype, Player, Season
 from courtside.db.session import get_db
 from courtside.errors import APIError
 from courtside.routes import CamelRouter
@@ -17,6 +17,7 @@ from courtside.schemas.archetype import (
     ArchetypeScore,
 )
 from courtside.services.archetype import compute_archetype
+from courtside.services.games import player_performances
 
 router = CamelRouter(tags=["archetype"])
 
@@ -59,15 +60,7 @@ def get_archetype(
     if season_id is None:
         season_id = _current_season_id(db, player.team_id)
 
-    games_played = len(
-        list(
-            db.scalars(
-                select(Game).where(
-                    Game.player_id == player.id, Game.season_id == season_id
-                )
-            ).all()
-        )
-    )
+    games_played = len(player_performances(db, player.id, season_id))
     if games_played < MIN_GAMES_FOR_ARCHETYPE:
         raise APIError(
             404,

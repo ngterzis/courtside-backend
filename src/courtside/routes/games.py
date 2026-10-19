@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from courtside.auth.deps import get_current_player
-from courtside.db.models import CoachNote, Game, Player, Season
+from courtside.db.models import CoachNote, GamePerformance, Player, Season
 from courtside.db.session import get_db
 from courtside.errors import APIError
 from courtside.routes import CamelRouter
@@ -15,6 +15,7 @@ from courtside.schemas.game import (
     GameStatsOut,
     PaginatedGames,
 )
+from courtside.services.games import player_performances
 from courtside.services.stats import (
     RAW_STAT_FIELDS,
     derived_stats,
@@ -36,14 +37,18 @@ def _current_season_id(db: Session, team_id: UUID) -> UUID:
 
 
 def _serialize_game(
-    game: Game, season_games: list[Game], coach_note: CoachNote | None
+    perf: GamePerformance,
+    season_perfs: list[GamePerformance],
+    coach_note: CoachNote | None,
 ) -> GameOut:
+    # The API's game id is the performance id: one player's view of one game.
+    game = perf.game
     stats = GameStatsOut(
-        **{f: getattr(game, f) for f in RAW_STAT_FIELDS},
-        **derived_stats(game),
+        **{f: getattr(perf, f) for f in RAW_STAT_FIELDS},
+        **derived_stats(perf),
     )
     return GameOut(
-        id=game.id,
+        id=perf.id,
         season_id=game.season_id,
         date=game.date,
         opponent=game.opponent,
@@ -52,30 +57,30 @@ def _serialize_game(
         team_score=game.team_score,
         opponent_score=game.opponent_score,
         stats=stats,
-        personal_bests=personal_bests(game, season_games),
-        coach_note=CoachNoteOut.model_validate(coach_note) if coach_note else None,
-    )
-
-
-def _load_season_games(db: Session, player_id: UUID, season_id: UUID) -> list[Game]:
-    return list(
-        db.scalars(
-            select(Game)
-            .where(Game.player_id == player_id, Game.season_id == season_id)
-            .order_by(Game.date.desc())
-        ).all()
+        personal_bests=personal_bests(perf, season_perfs),
+        coach_note=(
+            CoachNoteOut(
+                id=coach_note.id,
+                game_id=coach_note.performance_id,
+                author_name=coach_note.author_name,
+                text=coach_note.text,
+                created_at=coach_note.created_at,
+            )
+            if coach_note
+            else None
+        ),
     )
 
 
 def _load_coach_notes(
-    db: Session, game_ids: list[UUID]
+    db: Session, performance_ids: list[UUID]
 ) -> dict[UUID, CoachNote]:
-    if not game_ids:
+    if not performance_ids:
         return {}
     notes = db.scalars(
-        select(CoachNote).where(CoachNote.game_id.in_(game_ids))
+        select(CoachNote).where(CoachNote.performance_id.in_(performance_ids))
     ).all()
-    return {n.game_id: n for n in notes}
+    return {n.performance_id: n for n in notes}
 
 
 @router.get("/api/me/games", response_model=PaginatedGames)
@@ -89,7 +94,7 @@ def list_my_games(
     if season_id is None:
         season_id = _current_season_id(db, player.team_id)
 
-    season_games = _load_season_games(db, player.id, season_id)
+    season_games = player_performances(db, player.id, season_id)
     page = season_games[offset : offset + limit]
     notes = _load_coach_notes(db, [g.id for g in page])
     return PaginatedGames(
@@ -106,11 +111,11 @@ def last_game(
 ) -> GameOut | None:
     if season_id is None:
         season_id = _current_season_id(db, player.team_id)
-    season_games = _load_season_games(db, player.id, season_id)
+    season_games = player_performances(db, player.id, season_id)
     if not season_games:
         return None
     last = season_games[0]
-    note = db.scalar(select(CoachNote).where(CoachNote.game_id == last.id))
+    note = db.scalar(select(CoachNote).where(CoachNote.performance_id == last.id))
     return _serialize_game(last, season_games, note)
 
 
@@ -120,9 +125,9 @@ def get_game(
     player: Player = Depends(get_current_player),
     db: Session = Depends(get_db),
 ) -> GameOut:
-    game = db.get(Game, game_id)
-    if game is None or game.player_id != player.id:
+    perf = db.get(GamePerformance, game_id)
+    if perf is None or perf.player_id != player.id:
         raise APIError(404, "not_found", "Game not found")
-    season_games = _load_season_games(db, player.id, game.season_id)
-    note = db.scalar(select(CoachNote).where(CoachNote.game_id == game_id))
-    return _serialize_game(game, season_games, note)
+    season_games = player_performances(db, player.id, perf.game.season_id)
+    note = db.scalar(select(CoachNote).where(CoachNote.performance_id == game_id))
+    return _serialize_game(perf, season_games, note)

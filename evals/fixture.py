@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from courtside.db.models import (
     CoachNote,
-    Game,
+    GamePerformance,
     HomeAway,
     Player,
     Position,
@@ -21,6 +21,7 @@ from courtside.db.models import (
     Season,
     Team,
 )
+from courtside.services.games import get_or_create_game
 
 TODAY = date(2026, 5, 1)
 PLAYER_NAME = "Alex Rivera"
@@ -101,18 +102,17 @@ def spring_dates() -> list[date]:
     return [SPRING_START + timedelta(weeks=i) for i in range(len(SPRING))]
 
 
-def _to_game(
-    g: FixtureGame, *, team: Team, player: Player, season: Season, day: date
-) -> Game:
+def _add_game(
+    db: Session, g: FixtureGame, *, player: Player, season: Season, day: date
+) -> GamePerformance:
     ft_made, ft_att = g.ft
     # Field goals derived so the box score adds up to the listed points exactly.
     remaining = g.points - ft_made
     three_made = remaining % 2  # an odd remainder takes one three
     fg2_made = (remaining - 3 * three_made) // 2
     fg2_att, three_att = attempts(g)
-    return Game(
-        team_id=team.id,
-        player_id=player.id,
+    game = get_or_create_game(
+        db,
         season_id=season.id,
         date=day,
         opponent=g.opponent,
@@ -120,6 +120,10 @@ def _to_game(
         result=g.result,
         team_score=70 if g.result == W else 60,
         opponent_score=62 if g.result == W else 68,
+    )
+    perf = GamePerformance(
+        game_id=game.id,
+        player_id=player.id,
         points=g.points,
         rebounds=g.rebounds,
         assists=g.assists,
@@ -134,6 +138,9 @@ def _to_game(
         ft_made=ft_made,
         ft_attempted=ft_att,
     )
+    db.add(perf)
+    db.flush()
+    return perf
 
 
 def load(db: Session) -> Player:
@@ -157,18 +164,21 @@ def load(db: Session) -> Player:
     db.flush()
 
     for i, g in enumerate(SPRING):
-        game = _to_game(g, team=team, player=player, season=spring, day=spring_dates()[i])
-        db.add(game)
-        db.flush()
+        perf = _add_game(db, g, player=player, season=spring, day=spring_dates()[i])
         if g.note:
             db.add(
-                CoachNote(team_id=team.id, game_id=game.id, author_name="Coach Dee", text=g.note)
+                CoachNote(
+                    team_id=team.id,
+                    performance_id=perf.id,
+                    author_name="Coach Dee",
+                    text=g.note,
+                )
             )
     for i, g in enumerate(FALL):
-        day = FALL_START + timedelta(weeks=i)
-        db.add(_to_game(g, team=team, player=player, season=fall, day=day))
+        _add_game(db, g, player=player, season=fall, day=FALL_START + timedelta(weeks=i))
     for mate, pts in zip(mates, TEAMMATE_POINTS, strict=True):
+        # The player's first spring game, so teammates share its games row.
         base = FixtureGame("Hawks", H, W, pts, 9, 2, (6, 6))
-        db.add(_to_game(base, team=team, player=mate, season=spring, day=SPRING_START))
+        _add_game(db, base, player=mate, season=spring, day=SPRING_START)
     db.flush()
     return player

@@ -17,6 +17,7 @@ from courtside.db.models import (
     Archetype,
     CoachNote,
     Game,
+    GamePerformance,
     HomeAway,
     Notification,
     Player,
@@ -27,6 +28,7 @@ from courtside.db.models import (
     User,
 )
 from courtside.db.session import get_session_factory
+from courtside.services.games import get_or_create_game
 
 CSV_PATH = Path(__file__).parent.parent / "laspi_bc_stats.csv"
 TEAM_NAME = "Λάσπη BC"
@@ -123,7 +125,17 @@ def _parse_match(match: str, score: str) -> tuple[str, HomeAway, int, int, Resul
 
 
 def _wipe(db) -> None:
-    for model in (Notification, Archetype, CoachNote, Game, Season, User, Player, Team):
+    for model in (
+        Notification,
+        Archetype,
+        CoachNote,
+        GamePerformance,
+        Game,
+        Season,
+        User,
+        Player,
+        Team,
+    ):
         db.execute(delete(model))
 
 
@@ -189,17 +201,20 @@ def main() -> None:
                 row["match"], row["score"]
             )
             player = player_map[_normalize(row["player"])]
+            game = get_or_create_game(
+                db,
+                season_id=season.id,
+                date=_parse_date(row["date"]),
+                opponent=opponent,
+                home_away=home_away,
+                result=result,
+                team_score=team_score,
+                opponent_score=opp_score,
+            )
             db.add(
-                Game(
-                    team_id=team.id,
+                GamePerformance(
+                    game_id=game.id,
                     player_id=player.id,
-                    season_id=season.id,
-                    date=_parse_date(row["date"]),
-                    opponent=opponent,
-                    home_away=home_away,
-                    result=result,
-                    team_score=team_score,
-                    opponent_score=opp_score,
                     points=int(row["pts"]),
                     rebounds=int(row["reb_off"]) + int(row["reb_def"]),
                     assists=int(row["ast"]),
@@ -223,7 +238,7 @@ def main() -> None:
     print(f"  players: {len(player_map)}")
     print(f"  season:  {SEASON_LABEL}")
     game_count = len({r["match"] + r["date"] for r in rows})
-    print(f"  games:   {len(rows)} player-game rows across {game_count} games")
+    print(f"  games:   {game_count} games, {len(rows)} player performances")
     print()
     print("Logins:")
     for u in SEED_USERS:

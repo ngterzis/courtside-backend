@@ -21,9 +21,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
-from courtside.db.models import CoachNote, Game, HomeAway, Player, Result, Season
+from courtside.db.models import (
+    CoachNote,
+    Game,
+    GamePerformance,
+    HomeAway,
+    Player,
+    Result,
+    Season,
+)
+from courtside.services.games import player_performances
 from courtside.services.stats import (
     RAW_STAT_FIELDS,
     derived_stats,
@@ -154,7 +163,9 @@ def _round_stats(stats: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _averages(games: list[Game], season_id: UUID | None = None) -> dict[str, Any]:
+def _averages(
+    games: list[GamePerformance], season_id: UUID | None = None
+) -> dict[str, Any]:
     stats = season_averages(games, season_id)  # type: ignore[arg-type]
     stats.pop("season_id", None)
     stats["total_fg_made"] = stats["fg2_made"] + stats["three_made"]
@@ -162,37 +173,39 @@ def _averages(games: list[Game], season_id: UUID | None = None) -> dict[str, Any
     return _round_stats(stats)
 
 
-def _total_fg(game: Game) -> tuple[int, int]:
+def _total_fg(perf: GamePerformance) -> tuple[int, int]:
     """Field goals made/attempted across two- and three-pointers (no free throws)."""
-    return game.fg2_made + game.three_made, game.fg2_attempted + game.three_attempted
+    return perf.fg2_made + perf.three_made, perf.fg2_attempted + perf.three_attempted
 
 
-def _game_row(game: Game) -> dict[str, Any]:
-    d = derived_stats(game)
+def _game_row(perf: GamePerformance) -> dict[str, Any]:
+    game = perf.game
+    d = derived_stats(perf)
     return {
-        "game_id": str(game.id),
+        # The player's performance id: what get_game and the API call a game id.
+        "game_id": str(perf.id),
         "date": game.date.isoformat(),
         "opponent": game.opponent,
         "home_away": game.home_away.value,
         "result": game.result.value,
         "score": f"{game.team_score}-{game.opponent_score}",
-        "points": game.points,
-        "rebounds": game.rebounds,
-        "assists": game.assists,
-        "steals": game.steals,
-        "blocks": game.blocks,
-        "turnovers": game.turnovers,
-        "fouls": game.fouls,
+        "points": perf.points,
+        "rebounds": perf.rebounds,
+        "assists": perf.assists,
+        "steals": perf.steals,
+        "blocks": perf.blocks,
+        "turnovers": perf.turnovers,
+        "fouls": perf.fouls,
         # Makes and attempts, not just percentages, so questions about shot
         # volume can be answered from find_games rows without a get_game per game.
-        "fg2_made": game.fg2_made,
-        "fg2_attempted": game.fg2_attempted,
-        "three_made": game.three_made,
-        "three_attempted": game.three_attempted,
-        "ft_made": game.ft_made,
-        "ft_attempted": game.ft_attempted,
-        "total_fg_made": _total_fg(game)[0],
-        "total_fg_attempted": _total_fg(game)[1],
+        "fg2_made": perf.fg2_made,
+        "fg2_attempted": perf.fg2_attempted,
+        "three_made": perf.three_made,
+        "three_attempted": perf.three_attempted,
+        "ft_made": perf.ft_made,
+        "ft_attempted": perf.ft_attempted,
+        "total_fg_made": _total_fg(perf)[0],
+        "total_fg_attempted": _total_fg(perf)[1],
         "fg_pct": round(d["fg_pct"] * 100, 1),
         "three_pct": round(d["three_pct"] * 100, 1),
         "ft_pct": round(d["ft_pct"] * 100, 1),
@@ -200,16 +213,16 @@ def _game_row(game: Game) -> dict[str, Any]:
     }
 
 
-def _sort_value(game: Game, field: str) -> Any:
+def _sort_value(perf: GamePerformance, field: str) -> Any:
     if field == "date":
-        return game.date
+        return perf.game.date
     if field in _PCT_FIELDS:
-        return derived_stats(game)[field]  # type: ignore[literal-required]
+        return derived_stats(perf)[field]  # type: ignore[literal-required]
     if field == "total_fg_made":
-        return _total_fg(game)[0]
+        return _total_fg(perf)[0]
     if field == "total_fg_attempted":
-        return _total_fg(game)[1]
-    return getattr(game, field)
+        return _total_fg(perf)[1]
+    return getattr(perf, field)
 
 
 # --------------------------------------------------------------------------- #
@@ -249,13 +262,11 @@ def _player_games(
     db: Session,
     player: Player,
     season_id: UUID | Literal["all"] | None,
-) -> tuple[list[Game], Season | None]:
-    stmt = select(Game).where(Game.player_id == player.id)
+) -> tuple[list[GamePerformance], Season | None]:
     season: Season | None = None
     if season_id != "all":
         season = _resolve_season(db, player, season_id)
-        stmt = stmt.where(Game.season_id == season.id)
-    games = list(db.scalars(stmt.order_by(Game.date.desc())).all())
+    games = player_performances(db, player.id, season.id if season else None)
     return games, season
 
 
@@ -267,7 +278,12 @@ def _player_games(
 def list_seasons(db: Session, player: Player, _: ListSeasonsInput) -> dict[str, Any]:
     seasons = _team_seasons(db, player)
     counts: dict[UUID, int] = defaultdict(int)
-    for season_id in db.scalars(select(Game.season_id).where(Game.player_id == player.id)):
+    played = (
+        select(Game.season_id)
+        .join(GamePerformance, GamePerformance.game_id == Game.id)
+        .where(GamePerformance.player_id == player.id)
+    )
+    for season_id in db.scalars(played):
         counts[season_id] += 1
     return {
         "seasons": [
@@ -295,8 +311,8 @@ def get_season_summary(db: Session, player: Player, args: SeasonSummaryInput) ->
         "averages": _averages(games, season.id) if games else None,
         "totals": totals if games else None,
         "record": {
-            "wins": sum(1 for g in games if g.result == Result.WIN),
-            "losses": sum(1 for g in games if g.result == Result.LOSS),
+            "wins": sum(1 for g in games if g.game.result == Result.WIN),
+            "losses": sum(1 for g in games if g.game.result == Result.LOSS),
         },
     }
 
@@ -307,11 +323,11 @@ def find_games(db: Session, player: Player, args: FindGamesInput) -> dict[str, A
     matched = [
         g
         for g in games
-        if (needle is None or needle in g.opponent.casefold())
-        and (args.date_from is None or g.date >= args.date_from)
-        and (args.date_to is None or g.date <= args.date_to)
-        and (args.result is None or g.result.value == args.result)
-        and (args.home_away is None or g.home_away.value == args.home_away)
+        if (needle is None or needle in g.game.opponent.casefold())
+        and (args.date_from is None or g.game.date >= args.date_from)
+        and (args.date_to is None or g.game.date <= args.date_to)
+        and (args.result is None or g.game.result.value == args.result)
+        and (args.home_away is None or g.game.home_away.value == args.home_away)
     ]
     matched.sort(key=lambda g: _sort_value(g, args.sort_by), reverse=args.order == "desc")
     page = matched[: args.limit]
@@ -323,9 +339,14 @@ def find_games(db: Session, player: Player, args: FindGamesInput) -> dict[str, A
 
 
 def get_game(db: Session, player: Player, args: GetGameInput) -> dict[str, Any]:
-    stmt = select(Game).where(Game.player_id == player.id)
+    stmt = (
+        select(GamePerformance)
+        .join(GamePerformance.game)
+        .options(contains_eager(GamePerformance.game))
+        .where(GamePerformance.player_id == player.id)
+    )
     if args.game_id is not None:
-        stmt = stmt.where(Game.id == args.game_id)
+        stmt = stmt.where(GamePerformance.id == args.game_id)
     else:
         stmt = stmt.where(Game.date == args.date)
     matches = list(db.scalars(stmt).all())
@@ -336,18 +357,14 @@ def get_game(db: Session, player: Player, args: GetGameInput) -> dict[str, Any]:
             "More than one game on that date; call again with one of these game_ids: "
             + ", ".join(str(g.id) for g in matches)
         )
-    game = matches[0]
-    season = db.get(Season, game.season_id)
-    season_games = list(
-        db.scalars(
-            select(Game).where(Game.player_id == player.id, Game.season_id == game.season_id)
-        ).all()
-    )
-    note = db.scalar(select(CoachNote).where(CoachNote.game_id == game.id))
+    perf = matches[0]
+    season = db.get(Season, perf.game.season_id)
+    season_games = player_performances(db, player.id, perf.game.season_id)
+    note = db.scalar(select(CoachNote).where(CoachNote.performance_id == perf.id))
     return {
-        **_game_row(game),
+        **_game_row(perf),
         "season": season.label if season else None,
-        "season_highs_set": personal_bests(game, season_games),
+        "season_highs_set": personal_bests(perf, season_games),
         "coach_note": {"author": note.author_name, "text": note.text} if note else None,
     }
 
@@ -359,18 +376,18 @@ def get_split_averages(
     if args.last_n_games is not None:
         games = games[: args.last_n_games]
 
-    def key(g: Game) -> str:
+    def key(g: GamePerformance) -> str:
         match args.group_by:
             case "home_away":
-                return "home" if g.home_away == HomeAway.HOME else "away"
+                return "home" if g.game.home_away == HomeAway.HOME else "away"
             case "result":
-                return "wins" if g.result == Result.WIN else "losses"
+                return "wins" if g.game.result == Result.WIN else "losses"
             case "opponent":
-                return g.opponent
+                return g.game.opponent
             case "month":
-                return g.date.strftime("%Y-%m")
+                return g.game.date.strftime("%Y-%m")
 
-    groups: dict[str, list[Game]] = defaultdict(list)
+    groups: dict[str, list[GamePerformance]] = defaultdict(list)
     for g in games:
         groups[key(g)].append(g)
     return {

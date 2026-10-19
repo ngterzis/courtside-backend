@@ -6,7 +6,7 @@ checks keep the harness honest in CI for free.
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from courtside.db.models import Game
+from courtside.db.models import GamePerformance
 from courtside.services.chat_tools import execute_tool
 from evals import fixture
 from evals.cases import CASES
@@ -15,7 +15,11 @@ from evals.graders import Transcript, code_scores, numbers_in, passed
 
 def test_fixture_box_scores_add_up(db: Session) -> None:
     player = fixture.load(db)
-    games = list(db.scalars(select(Game).where(Game.player_id == player.id)).all())
+    games = list(
+        db.scalars(
+            select(GamePerformance).where(GamePerformance.player_id == player.id)
+        ).all()
+    )
     assert len(games) == len(fixture.SPRING) + len(fixture.FALL)
     for g in games:
         assert g.fg2_made * 2 + g.three_made * 3 + g.ft_made == g.points
