@@ -111,7 +111,7 @@ class Season(Base):
 
 
 class Game(Base):
-    __tablename__ = "games"
+    __tablename__ = "game_performances"
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"), index=True)
@@ -149,7 +149,9 @@ class CoachNote(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     team_id: Mapped[UUID] = mapped_column(ForeignKey("teams.id"), index=True)
-    game_id: Mapped[UUID] = mapped_column(ForeignKey("games.id"), unique=True)
+    game_id: Mapped[UUID] = mapped_column(
+        ForeignKey("game_performances.id"), unique=True
+    )
     author_name: Mapped[str] = mapped_column(String(120))
     text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
